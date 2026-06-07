@@ -51,6 +51,25 @@ const fightingSchema = {
 };
 
 /**
+ * Extraction Schema for Profile Screenshots
+ */
+const profileSchema = {
+  description: "Extracted data from a console profile screenshot for verification",
+  type: SchemaType.OBJECT,
+  properties: {
+    gamerTag: {
+      type: SchemaType.STRING,
+      description: "The primary gamer tag or username visible on the profile",
+    },
+    bioCode: {
+      type: SchemaType.STRING,
+      description: "The verification code found in the bio or about me section (e.g. ARC-XXXX)",
+    },
+  },
+  required: ["gamerTag", "bioCode"],
+};
+
+/**
  * Uses Gemini to extract match data from a screenshot.
  */
 export async function extractMatchData(imageUrl: string, customPrompt?: string, gameType: string = 'FIGHTING') {
@@ -90,6 +109,45 @@ export async function extractMatchData(imageUrl: string, customPrompt?: string, 
     return JSON.parse(result.response.text());
   } catch (error) {
     console.error('AI Extraction Error:', error);
+    return null;
+  }
+}
+
+/**
+ * Uses Gemini to verify a console profile screenshot.
+ */
+export async function verifyProfileScreenshot(imageUrl: string) {
+  try {
+    const response = await fetch(imageUrl);
+    const buffer = await response.arrayBuffer();
+    const base64Image = Buffer.from(buffer).toString('base64');
+
+    const model = genAI.getGenerativeModel({
+      model: "gemini-1.5-flash",
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema: profileSchema,
+      },
+    });
+
+    const prompt = `Analyze this console profile screenshot (PSN, Xbox, or Steam).
+    1. Identify the primary Gamer Tag / Username.
+    2. Search the bio or "About Me" section for a verification code formatted like ARC-XXXX.
+    Return the data in the requested JSON format.`;
+
+    const result = await model.generateContent([
+      prompt,
+      {
+        inlineData: {
+          data: base64Image,
+          mimeType: "image/jpeg",
+        },
+      },
+    ]);
+
+    return JSON.parse(result.response.text());
+  } catch (error) {
+    console.error('Profile Verification Error:', error);
     return null;
   }
 }

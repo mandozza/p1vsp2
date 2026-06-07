@@ -8,9 +8,13 @@ import { getUserAchievements } from '@/actions/achievement.actions';
 import { getUserRivalries } from '@/actions/rivalry.actions';
 import { ACHIEVEMENTS } from '@/lib/achievements.config';
 import { CombatAnalyst } from '@/components/custom/CombatAnalyst';
+import { VerificationSector } from '@/components/custom/VerificationSector';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 
 export default async function ProfilePage({ params }: { params: { username: string } }) {
   await dbConnect();
+  const session = await getServerSession(authOptions);
 
   const user = await User.findOne({ username: params.username }).lean();
   if (!user) notFound();
@@ -19,6 +23,8 @@ export default async function ProfilePage({ params }: { params: { username: stri
     getUserAchievements(user._id.toString()),
     getUserRivalries(user._id.toString()),
   ]);
+
+  const isOwner = session?.user?.id === user._id.toString();
 
   const matchHistory = await Match.find({
     $or: [{ challengerId: user._id }, { defenderId: user._id }],
@@ -43,9 +49,16 @@ export default async function ProfilePage({ params }: { params: { username: stri
           </div>
 
           <div className="text-center md:text-left flex-1">
-            <h1 className="text-4xl font-black uppercase tracking-tighter text-white italic mb-2">
-              {user.username}
-            </h1>
+            <div className="flex items-center justify-center md:justify-start space-x-3 mb-2">
+               <h1 className="text-4xl font-black uppercase tracking-tighter text-white italic">
+                 {user.username}
+               </h1>
+               {user.verificationStatus === 'verified' && (
+                 <div className="rounded-full bg-neon-cyan/20 p-1 border border-neon-cyan/30 glow-cyan shadow-[0_0_10px_rgba(0,255,255,0.2)]">
+                    <ShieldCheck className="h-4 w-4 text-neon-cyan" />
+                 </div>
+               )}
+            </div>
             <div className="flex flex-wrap items-center justify-center md:justify-start gap-4">
                <Badge icon={Trophy} label={`${user.eloRating} ELO`} color="cyan" />
                <Badge icon={Shield} label={user.role === 'admin' ? 'Operator' : 'Member'} color="purple" />
@@ -60,6 +73,8 @@ export default async function ProfilePage({ params }: { params: { username: stri
       </div>
 
       <CombatAnalyst username={user.username} />
+
+      {isOwner && <VerificationSector user={JSON.parse(JSON.stringify(user))} />}
 
       <div className="grid gap-8 lg:grid-cols-3">
         {/* Left Column: Stats & Reputation */}

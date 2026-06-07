@@ -29,6 +29,10 @@ export const UserSchema = z.object({
     discord: z.string().optional(),
   }).default({}),
   friends: z.array(z.string()).default([]),
+  gamerTag: z.string().optional(),
+  tagPlatform: z.enum(['PSN', 'XBOX', 'STEAM']).optional(),
+  verificationStatus: z.enum(['unverified', 'pending', 'verified']).default('unverified'),
+  verificationCode: z.string().optional(),
 });
 
 export type IUser = z.infer<typeof UserSchema> & {
@@ -63,6 +67,14 @@ const UserMongooseSchema = new Schema<IUserDocument>(
       discord: { type: String },
     },
     friends: [{ type: Schema.Types.ObjectId, ref: 'User' }],
+    gamerTag: { type: String },
+    tagPlatform: { type: String, enum: ['PSN', 'XBOX', 'STEAM'] },
+    verificationStatus: { 
+      type: String, 
+      enum: ['unverified', 'pending', 'verified'], 
+      default: 'unverified' 
+    },
+    verificationCode: { type: String },
   },
   { timestamps: true }
 );

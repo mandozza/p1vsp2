@@ -2,7 +2,7 @@ import dbConnect from '@/lib/db';
 import { User } from '@/models/User';
 import { Match } from '@/models/Match';
 import { UserAchievement } from '@/models/UserAchievement';
-import { Trophy, Swords, Zap, Shield, Crown, Medal, TrendingUp, Activity } from 'lucide-react';
+import { Trophy, Swords, Zap, Shield, Crown, Medal, TrendingUp, Activity, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 
@@ -125,9 +125,14 @@ function LeaderboardRow({ player, rank }: { player: any; rank: number }) {
         </div>
         
         <div>
-          <h3 className="text-lg font-black uppercase italic text-white tracking-tight group-hover:text-neon-pink transition-colors">
-            {player.username}
-          </h3>
+          <div className="flex items-center space-x-2">
+             <h3 className="text-lg font-black uppercase italic text-white tracking-tight group-hover:text-neon-pink transition-colors">
+               {player.username}
+             </h3>
+             {player.verificationStatus === 'verified' && (
+               <ShieldCheck className="h-3 w-3 text-neon-cyan" />
+             )}
+          </div>
           <div className="flex items-center space-x-3 mt-0.5">
             <span className="text-[8px] font-bold text-white/20 uppercase tracking-widest">
               W: {player.stats.wins} / L: {player.stats.losses}
