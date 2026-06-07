@@ -34,6 +34,16 @@ export const UserSchema = z.object({
   verificationStatus: z.enum(['unverified', 'pending', 'verified']).default('unverified'),
   verificationCode: z.string().optional(),
   pushSubscription: z.any().optional(),
+  gameStats: z.array(z.object({
+    gameId: z.string(),
+    eloRating: z.number().int().nonnegative().default(1000),
+    stats: z.object({
+      wins: z.number().int().nonnegative().default(0),
+      losses: z.number().int().nonnegative().default(0),
+      draws: z.number().int().nonnegative().default(0),
+      dnfs: z.number().int().nonnegative().default(0),
+    }).default({}),
+  })).default([]),
 });
 
 export type IUser = z.infer<typeof UserSchema> & {
@@ -77,6 +87,18 @@ const UserMongooseSchema = new Schema<IUserDocument>(
     },
     verificationCode: { type: String },
     pushSubscription: { type: Schema.Types.Mixed },
+    gameStats: [
+      {
+        gameId: { type: Schema.Types.ObjectId, ref: 'Game', required: true },
+        eloRating: { type: Number, required: true, default: 1000 },
+        stats: {
+          wins: { type: Number, required: true, default: 0 },
+          losses: { type: Number, required: true, default: 0 },
+          draws: { type: Number, required: true, default: 0 },
+          dnfs: { type: Number, required: true, default: 0 },
+        },
+      }
+    ],
   },
   { timestamps: true }
 );

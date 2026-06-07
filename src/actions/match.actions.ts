@@ -274,15 +274,34 @@ export async function resolveMatch(
     const winner = isChallengerWinner ? challenger : defender;
     const loser = isChallengerWinner ? defender : challenger;
 
-    // Calculate ELO
-    const { winnerNewElo, loserNewElo } = calculateElo(winner.eloRating, loser.eloRating);
+    // Calculate ELO (Per-Game)
+    const gameId = match.gameId.toString();
+    const getGameStat = (user: any) => {
+      let stat = user.gameStats.find((gs: any) => gs.gameId.toString() === gameId);
+      if (!stat) {
+        user.gameStats.push({ gameId, eloRating: 1000, stats: { wins: 0, losses: 0, draws: 0, dnfs: 0 } });
+        stat = user.gameStats[user.gameStats.length - 1];
+      }
+      return stat;
+    };
 
-    // Update Winner Stats
-    winner.eloRating = winnerNewElo;
+    const winnerGS = getGameStat(winner);
+    const loserGS = getGameStat(loser);
+
+    const { winnerNewElo, loserNewElo } = calculateElo(winnerGS.eloRating, loserGS.eloRating);
+
+    // Update Winner Stats (Global + Game Specific)
+    winnerGS.eloRating = winnerNewElo;
+    winnerGS.stats.wins += 1;
+    winner.eloRating = winnerNewElo; 
     winner.stats.wins += 1;
     await winner.save();
 
-    // Update Loser Stats
+    // Update Loser Stats (Global + Game Specific)
+    loserGS.eloRating = loserNewElo;
+    loserGS.stats.losses += 1;
+    if (outcome.isDNF) loserGS.stats.dnfs += 1;
+
     loser.eloRating = loserNewElo;
     loser.stats.losses += 1;
     if (outcome.isDNF) loser.stats.dnfs += 1;

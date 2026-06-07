@@ -5,17 +5,41 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { Trophy, Swords, Zap, Shield, LayoutGrid } from 'lucide-react';
 import { PlayersClient } from '@/components/custom/PlayersClient';
+import mongoose from 'mongoose';
 
-export default async function PlayersPage() {
+export default async function PlayersPage({ searchParams }: { searchParams: { gameId?: string } }) {
   await dbConnect();
   const session = await getServerSession(authOptions);
-  
-  const players = await User.find({ 
-    _id: { $ne: session?.user?.id },
-    role: 'member'
-  }).sort({ eloRating: -1 }).lean();
 
   const games = await Game.find({ active: true }).sort({ title: 1 }).lean();
+  const selectedGameId = searchParams.gameId || games[0]?._id?.toString();
+  
+  // Fetch players, sorting by the selected game's ELO (if they have it), otherwise global ELO
+  const players = await User.aggregate([
+    { 
+      $match: { 
+        role: 'member', 
+        _id: { $ne: session?.user?.id ? new mongoose.Types.ObjectId(session.user.id) : null } 
+      } 
+    },
+    {
+      $addFields: {
+        sectorStat: {
+          $filter: {
+            input: '$gameStats',
+            as: 'gs',
+            cond: { $eq: ['$$gs.gameId', new mongoose.Types.ObjectId(selectedGameId)] }
+          }
+        }
+      }
+    },
+    {
+      $sort: {
+        'sectorStat.0.eloRating': -1,
+        eloRating: -1
+      }
+    }
+  ]);
 
   return (
     <div className="container mx-auto px-4 py-12">
@@ -25,7 +49,7 @@ export default async function PlayersPage() {
             Active <span className="text-neon-pink">Players</span>
           </h1>
           <p className="mt-2 text-sm font-bold uppercase tracking-widest text-white/30">
-            Challenge the best to climb the global leaderboard
+            Challenge the best to climb the sector leaderboards
           </p>
         </div>
       </div>
@@ -33,6 +57,7 @@ export default async function PlayersPage() {
       <PlayersClient 
         initialPlayers={JSON.parse(JSON.stringify(players))} 
         games={JSON.parse(JSON.stringify(games))} 
+        selectedGameId={selectedGameId}
       />
     </div>
   );

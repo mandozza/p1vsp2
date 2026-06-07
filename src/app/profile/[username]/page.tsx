@@ -16,7 +16,9 @@ export default async function ProfilePage({ params }: { params: { username: stri
   await dbConnect();
   const session = await getServerSession(authOptions);
 
-  const user = await User.findOne({ username: params.username }).lean();
+  const user = await User.findOne({ username: params.username })
+    .populate('gameStats.gameId', 'title')
+    .lean();
   if (!user) notFound();
 
   const [achievements, rivalries] = await Promise.all([
@@ -60,7 +62,6 @@ export default async function ProfilePage({ params }: { params: { username: stri
                )}
             </div>
             <div className="flex flex-wrap items-center justify-center md:justify-start gap-4">
-               <Badge icon={Trophy} label={`${user.eloRating} ELO`} color="cyan" />
                <Badge icon={Shield} label={user.role === 'admin' ? 'Operator' : 'Member'} color="purple" />
             </div>
           </div>
@@ -73,6 +74,38 @@ export default async function ProfilePage({ params }: { params: { username: stri
       </div>
 
       <CombatAnalyst username={user.username} />
+
+      {/* Sector Ratings */}
+      {user.gameStats && user.gameStats.length > 0 && (
+        <section className="rounded-3xl border border-white/10 bg-white/5 p-8 backdrop-blur-xl mb-12">
+           <div className="flex items-center space-x-3 mb-8">
+              <div className="rounded-lg bg-neon-pink/10 p-2 text-neon-pink border border-neon-pink/20">
+                 <Trophy className="h-5 w-5" />
+              </div>
+              <div>
+                 <h3 className="text-xl font-black uppercase italic text-white tracking-tighter">Sector Ratings</h3>
+                 <p className="text-[8px] font-bold text-white/20 uppercase tracking-widest">Independent Performance Metrics</p>
+              </div>
+           </div>
+
+           <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-4">
+              {user.gameStats.map((gs: any) => (
+                <div key={gs.gameId?._id?.toString() || Math.random()} className="rounded-2xl border border-white/5 bg-arcade-black/40 p-5 flex items-center justify-between group hover:border-neon-cyan/30 transition-all">
+                   <div>
+                      <p className="text-[8px] font-black uppercase tracking-widest text-white/20 mb-1">{gs.gameId?.title || 'Unknown'}</p>
+                      <p className="text-2xl font-black italic text-white tracking-tighter">{gs.eloRating}</p>
+                   </div>
+                   <div className="text-right">
+                      <p className="text-[6px] font-bold text-white/10 uppercase tracking-widest">Win Rate</p>
+                      <p className="text-[10px] font-black text-neon-cyan uppercase italic">
+                        {Math.round((gs.stats.wins / (gs.stats.wins + gs.stats.losses || 1)) * 100)}%
+                      </p>
+                   </div>
+                </div>
+              ))}
+           </div>
+        </section>
+      )}
 
       {isOwner && <VerificationSector user={JSON.parse(JSON.stringify(user))} />}
 

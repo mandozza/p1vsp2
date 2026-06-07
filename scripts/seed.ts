@@ -121,7 +121,19 @@ async function seed() {
 
     console.log('🧹 Database cleaned.');
 
-    // Create Admin User
+    // 1. Create Games
+    const createdGames = [];
+    for (const gameData of GAMES) {
+      const g = await Game.create(gameData);
+      createdGames.push(g);
+      console.log(`🎮 Game "${gameData.title}" created.`);
+    }
+
+    const ufcId = createdGames.find(g => g.slug === 'ufc-6')?._id;
+    const sfId = createdGames.find(g => g.slug === 'street-fighter-6')?._id;
+    const maddenId = createdGames.find(g => g.slug === 'madden-26')?._id;
+
+    // 2. Create Admin User
     const admin = await User.create({
       name: 'Arcade Admin',
       email: 'admin@pro-project.io',
@@ -135,7 +147,7 @@ async function seed() {
     });
     console.log('👤 Admin user created.');
 
-    // Create Demo Users
+    // 3. Create Demo Users
     await User.create({
       name: 'ClawMaster',
       email: 'player@pro-project.io',
@@ -146,6 +158,10 @@ async function seed() {
       stats: { wins: 42, losses: 10, draws: 2, dnfs: 1 },
       verificationStatus: 'verified',
       gamerTag: 'CLAW_MSTR',
+      gameStats: [
+        { gameId: ufcId, eloRating: 1800, stats: { wins: 30, losses: 5, draws: 0, dnfs: 0 } },
+        { gameId: sfId, eloRating: 1200, stats: { wins: 12, losses: 5, draws: 2, dnfs: 1 } },
+      ]
     });
     
     await User.create({
@@ -158,6 +174,10 @@ async function seed() {
       stats: { wins: 28, losses: 5, draws: 0, dnfs: 0 },
       verificationStatus: 'verified',
       gamerTag: 'ARC_LEGENDA',
+      gameStats: [
+        { gameId: ufcId, eloRating: 1950, stats: { wins: 25, losses: 2, draws: 0, dnfs: 0 } },
+        { gameId: maddenId, eloRating: 1400, stats: { wins: 3, losses: 3, draws: 0, dnfs: 0 } },
+      ]
     });
 
     await User.create({
@@ -169,16 +189,13 @@ async function seed() {
       eloRating: 1200,
       stats: { wins: 15, losses: 15, draws: 5, dnfs: 0 },
       verificationStatus: 'unverified',
+      gameStats: [
+        { gameId: sfId, eloRating: 1200, stats: { wins: 15, losses: 15, draws: 5, dnfs: 0 } },
+      ]
     });
     console.log('👤 Demo users created.');
 
-    // Create Games
-    for (const gameData of GAMES) {
-      await Game.create(gameData);
-      console.log(`🎮 Game "${gameData.title}" created.`);
-    }
-
-    // Create Machines and Prizes
+    // 4. Create Machines and Prizes
     for (const machineData of MACHINES) {
       const machine = await Machine.create(machineData);
       console.log(`🕹️  Created machine: ${machine.name}`);
