@@ -3,31 +3,43 @@ export interface Achievement {
   name: string;
   description: string;
   icon: string; // Lucide icon name or emoji
+  color: 'pink' | 'cyan' | 'purple' | 'green' | 'yellow';
 }
 
 export const ACHIEVEMENTS: Record<string, Achievement> = {
-  FIRST_CATCH: {
-    id: 'FIRST_CATCH',
-    name: 'First Catch',
-    description: 'Caught your very first prize in the arcade!',
-    icon: '🏆',
+  FIRST_BLOOD: {
+    id: 'FIRST_BLOOD',
+    name: 'First Blood',
+    description: 'Secured your first verified victory.',
+    icon: 'Swords',
+    color: 'pink',
   },
-  TEN_WINS: {
-    id: 'TEN_WINS',
-    name: 'Master Clawer',
-    description: 'Successfully caught 10 prizes.',
-    icon: '👑',
+  THE_FAIR_FIGHTER: {
+    id: 'THE_FAIR_FIGHTER',
+    name: 'The Fair Fighter',
+    description: 'Completed 10 matches without a DNF.',
+    icon: 'ShieldCheck',
+    color: 'green',
   },
-  HIGH_ROLLER: {
-    id: 'HIGH_ROLLER',
-    name: 'High Roller',
-    description: 'Purchased a High Roller credit pack.',
-    icon: '💰',
+  TRIBUNAL_JUDGE: {
+    id: 'TRIBUNAL_JUDGE',
+    name: 'Tribunal Judge',
+    description: 'Cast 10 votes in the Community Tribunal.',
+    icon: 'Gavel',
+    color: 'purple',
   },
-  NIGHT_OWL: {
-    id: 'NIGHT_OWL',
-    name: 'Night Owl',
-    description: 'Caught a prize between 12 AM and 5 AM.',
-    icon: '🦉',
+  THE_UNBREAKABLE: {
+    id: 'THE_UNBREAKABLE',
+    name: 'The Unbreakable',
+    description: 'Reached an ELO rating of 1500.',
+    icon: 'Trophy',
+    color: 'cyan',
+  },
+  ELITE_OPERATOR: {
+    id: 'ELITE_OPERATOR',
+    name: 'Elite Operator',
+    description: 'Reached an ELO rating of 2000.',
+    icon: 'Zap',
+    color: 'yellow',
   },
 };

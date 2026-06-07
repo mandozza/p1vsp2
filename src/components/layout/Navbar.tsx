@@ -2,16 +2,19 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useSession } from 'next-auth/react';
-import { motion } from 'framer-motion';
+import { usePathname } from 'next/navigation';
 import { Joystick, Coins, User, Plus } from 'lucide-react';
 import { CreditModal } from '@/components/custom/CreditModal';
+import { cn } from '@/lib/utils';
 
 export function Navbar() {
   const { data: session } = useSession();
+  const pathname = usePathname();
   const [isCreditModalOpen, setIsCreditModalOpen] = useState(false);
 
   const userId = session?.user?.id;
+
+  if (pathname?.startsWith('/admin') || pathname === '/beta' || pathname === '/login') return null;
 
   return (
     <>
@@ -25,6 +28,12 @@ export function Navbar() {
               ProProject
             </span>
           </Link>
+
+          <div className="hidden md:flex items-center space-x-8">
+            <NavLink href="/players" label="Players" />
+            <NavLink href="/matches" label="Matches" />
+            <NavLink href="/tribunal" label="Tribunal" />
+          </div>
 
           <div className="flex items-center space-x-6">
             <div className="flex items-center space-x-2">
@@ -66,5 +75,22 @@ export function Navbar() {
         onClose={() => setIsCreditModalOpen(false)}
       />
     </>
+  );
+}
+
+function NavLink({ href, label }: { href: string; label: string }) {
+  const pathname = usePathname();
+  const isActive = pathname === href;
+
+  return (
+    <Link 
+      href={href} 
+      className={cn(
+        "text-[10px] font-black uppercase tracking-widest transition-all hover:text-white",
+        isActive ? "text-neon-pink text-glow-pink" : "text-white/40"
+      )}
+    >
+      {label}
+    </Link>
   );
 }

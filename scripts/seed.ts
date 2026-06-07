@@ -2,6 +2,7 @@ import dbConnect from '../src/lib/db';
 import { Machine } from '../src/models/Machine';
 import { Product } from '../src/models/Product';
 import { User } from '../src/models/User';
+import { Game } from '../src/models/Game';
 import mongoose from 'mongoose';
 
 const MACHINES = [
@@ -49,6 +50,7 @@ async function seed() {
     await Machine.deleteMany({});
     await Product.deleteMany({});
     await User.deleteMany({});
+    await Game.deleteMany({});
 
     console.log('🧹 Database cleaned.');
 
@@ -59,7 +61,8 @@ async function seed() {
       username: 'admin',
       role: 'admin',
       creditBalance: 1000000,
-      totalWins: 0,
+      eloRating: 2500,
+      stats: { wins: 0, losses: 0, draws: 0, dnfs: 0 },
     });
     console.log('👤 Admin user created.');
 
@@ -70,7 +73,8 @@ async function seed() {
       username: 'clawmaster',
       role: 'member',
       creditBalance: 5000,
-      totalWins: 42,
+      eloRating: 1500,
+      stats: { wins: 42, losses: 10, draws: 2, dnfs: 1 },
     });
     
     await User.create({
@@ -79,7 +83,8 @@ async function seed() {
       username: 'arcado',
       role: 'member',
       creditBalance: 2000,
-      totalWins: 28,
+      eloRating: 1800,
+      stats: { wins: 28, losses: 5, draws: 0, dnfs: 0 },
     });
 
     await User.create({
@@ -88,9 +93,19 @@ async function seed() {
       username: 'quack',
       role: 'member',
       creditBalance: 1500,
-      totalWins: 15,
+      eloRating: 1200,
+      stats: { wins: 15, losses: 15, draws: 5, dnfs: 0 },
     });
     console.log('👤 Demo users created.');
+
+    // Create Game
+    await Game.create({
+      title: 'UFC 6',
+      slug: 'ufc-6',
+      active: true,
+      thumbnailUrl: 'https://picsum.photos/seed/ufc6/800/400',
+    });
+    console.log('🎮 Game "UFC 6" created.');
 
     // Create Machines and Prizes
     for (const machineData of MACHINES) {

@@ -28,7 +28,9 @@ Welcome, AI Coding Assistant! To ensure you write clean, compliant, and type-saf
 ---
 
 ## 🤖 4. AI Narrator & Background Engines
-*   **The Narrator**: Our Gemini-powered AI agent reacts to live events. Ensure any new major platform event (e.g., a new machine type, a rare prize catch) is hooked into the `narrator-engine.ts` watcher.
+*   **The Narrator**: Our Gemini-powered AI agent reacts to live events. 
+    *   **Victory Commentary**: Every verified match automatically triggers the Narrator (Gemini 1.5 Flash) to generate 90s arcade-style commentary.
+    *   **Background Watcher**: Ensure any new major platform event (e.g., a new machine type, a rare prize catch) is hooked into the `narrator-engine.ts` watcher.
 *   **Background Processes**: The arcade relies on multiple engines (`hardware-simulator`, `narrator-engine`). Always ensure your changes don't break the event-driven communication (Change Streams/SSE) between these engines and the UI.
 
 ---

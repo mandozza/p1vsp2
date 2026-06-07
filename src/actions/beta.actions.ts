@@ -6,6 +6,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { BetaCode } from '@/models/BetaCode';
 import { cookies } from 'next/headers';
+import { revalidatePath } from 'next/cache';
 import { ActionResult } from './credit.actions';
 
 /**
