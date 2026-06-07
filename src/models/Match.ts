@@ -4,6 +4,7 @@ import { z } from 'zod';
 export const MatchResultSchema = z.object({
   userId: z.string(),
   screenshotUrl: z.string().url(),
+  videoUrl: z.string().url().optional(),
   aiExtractedData: z.object({
     winnerTag: z.string().optional(),
     loserTag: z.string().optional(),
@@ -79,6 +80,7 @@ const MatchMongooseSchema = new Schema<IMatchDocument>(
       {
         userId: { type: Schema.Types.ObjectId, ref: 'User' },
         screenshotUrl: { type: String },
+        videoUrl: { type: String },
         aiExtractedData: {
           winnerTag: String,
           loserTag: String,

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { Camera, Upload, Loader2, CheckCircle2 } from 'lucide-react';
+import { Camera, Upload, Loader2, CheckCircle2, Video } from 'lucide-react';
 import { getResultUploadUrl, submitMatchResult } from '@/actions/match.actions';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
@@ -14,6 +14,7 @@ export function ResultUploader({ matchId }: { matchId: string }) {
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [videoUrl, setVideoUrl] = useState('');
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -108,7 +109,7 @@ export function ResultUploader({ matchId }: { matchId: string }) {
       if (!uploadResponse.ok) throw new Error('Failed to upload to S3');
 
       // 3. Submit result to DB
-      const submitResult = await submitMatchResult(matchId, publicUrl);
+      const submitResult = await submitMatchResult(matchId, publicUrl, videoUrl);
       if (!submitResult.success) throw new Error(submitResult.error);
 
       setSuccess(true);
@@ -173,6 +174,20 @@ export function ResultUploader({ matchId }: { matchId: string }) {
         accept="image/*" 
         className="hidden" 
       />
+
+      <div className="space-y-2">
+        <label className="text-[10px] font-black uppercase tracking-widest text-white/40 ml-1 flex items-center space-x-2">
+          <Video className="h-3 w-3" />
+          <span>Video Proof Link (Optional)</span>
+        </label>
+        <input 
+          type="url" 
+          value={videoUrl}
+          onChange={(e) => setVideoUrl(e.target.value)}
+          placeholder="YouTube or Twitch Clip URL..."
+          className="w-full rounded-xl border border-white/10 bg-white/5 p-4 text-[10px] font-bold text-white focus:outline-none focus:border-neon-pink/50 transition-all"
+        />
+      </div>
 
       <button
         onClick={handleUpload}

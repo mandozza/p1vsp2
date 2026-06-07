@@ -167,9 +167,9 @@ export async function getResultUploadUrl(matchId: string, contentType: string): 
 }
 
 /**
- * Submits a match result with a screenshot URL.
+ * Submits a match result with a screenshot URL and optional video proof.
  */
-export async function submitMatchResult(matchId: string, screenshotUrl: string): Promise<ActionResult> {
+export async function submitMatchResult(matchId: string, screenshotUrl: string, videoUrl?: string): Promise<ActionResult> {
   try {
     await dbConnect();
     const session = await getServerSession(authOptions);
@@ -190,6 +190,7 @@ export async function submitMatchResult(matchId: string, screenshotUrl: string):
     match.results.push({
       userId: session.user.id,
       screenshotUrl,
+      videoUrl,
       submittedAt: new Date(),
     });
 

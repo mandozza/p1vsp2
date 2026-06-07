@@ -3,9 +3,10 @@ import { Match } from '@/models/Match';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { notFound, redirect } from 'next/navigation';
-import { Gavel, Shield, Info, Users, ExternalLink } from 'lucide-react';
+import { Gavel, Shield, Info, Users, ExternalLink, Video } from 'lucide-react';
 import Image from 'next/image';
 import { TribunalVoteForm } from '@/components/custom/TribunalVoteForm';
+import { VideoEmbed } from '@/components/custom/VideoEmbed';
 
 export default async function DisputeDetailsPage({ params }: { params: { id: string } }) {
   await dbConnect();
@@ -71,22 +72,26 @@ export default async function DisputeDetailsPage({ params }: { params: { id: str
                 </div>
               </div>
 
-              <div className="relative aspect-video w-full overflow-hidden rounded-3xl border border-white/10 bg-white/5 group">
-                <Image 
-                  src={result.screenshotUrl} 
-                  alt="Evidence" 
-                  fill 
-                  className="object-cover transition-transform group-hover:scale-105" 
-                />
-                <a 
-                  href={result.screenshotUrl} 
-                  target="_blank" 
-                  rel="noopener noreferrer"
-                  className="absolute bottom-4 right-4 rounded-lg bg-black/60 backdrop-blur-md p-2 text-white/60 hover:text-white transition-colors"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                </a>
-              </div>
+              {result.videoUrl ? (
+                <VideoEmbed url={result.videoUrl} />
+              ) : (
+                <div className="relative aspect-video w-full overflow-hidden rounded-3xl border border-white/10 bg-white/5 group">
+                  <Image 
+                    src={result.screenshotUrl} 
+                    alt="Evidence" 
+                    fill 
+                    className="object-cover transition-transform group-hover:scale-105" 
+                  />
+                  <a 
+                    href={result.screenshotUrl} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="absolute bottom-4 right-4 rounded-lg bg-black/60 backdrop-blur-md p-2 text-white/60 hover:text-white transition-colors"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                  </a>
+                </div>
+              )}
 
               <div className="rounded-2xl border border-white/5 bg-white/5 p-4 flex items-start space-x-3">
                  <Info className="h-4 w-4 text-white/20 shrink-0 mt-0.5" />
