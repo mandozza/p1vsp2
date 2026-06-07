@@ -10,6 +10,7 @@ import { revalidatePath } from 'next/cache';
 import { ActionResult } from './credit.actions';
 import { createNotification } from './notification.actions';
 import { transferCredits } from '@/lib/economy';
+import { sendDiscordNotification } from '@/lib/discord';
 
 /**
  * Creates a new tournament.
@@ -26,6 +27,15 @@ export async function createTournament(data: { name: string; gameId: string; ent
     rounds: [],
     entryFee: data.entryFee || 0,
     prizePool: 0,
+  });
+
+  await sendDiscordNotification({
+    title: 'Tournament Initiated!',
+    description: `**${tournament.name}** is now open for registration! Sector operators, prepare for combat.`,
+    color: 0x00ffff, // Cyan
+    fields: [
+      { name: 'Entry Fee', value: `${tournament.entryFee} Credits`, inline: true },
+    ]
   });
 
   revalidatePath('/admin/tournaments');
@@ -165,6 +175,16 @@ export async function checkTournamentProgression(tournamentId: string) {
       }
 
       const winner = await User.findById(winners[0]);
+
+      await sendDiscordNotification({
+        title: 'GRAND CHAMPION CROWNED!',
+        description: `**${winner?.username}** has conquered the **${tournament.name}** sector!`,
+        color: 0xeab308, // Gold
+        fields: [
+          { name: 'Prize Pool', value: `${tournament.prizePool} Credits`, inline: true },
+        ]
+      });
+
       await createNotification({
         userId: winners[0]!.toString(),
         type: 'ACHIEVEMENT_UNLOCKED',

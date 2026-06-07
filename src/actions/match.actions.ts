@@ -18,6 +18,7 @@ import { createNotification } from './notification.actions';
 import { checkTournamentProgression } from './tournament.actions';
 import { updateRivalry } from './rivalry.actions';
 import { transferCredits } from '@/lib/economy';
+import { sendDiscordNotification } from '@/lib/discord';
 
 /**
  * Creates a new match challenge.
@@ -291,9 +292,19 @@ export async function resolveMatch(
         type: 'WAGER_WIN',
         referenceId: match._id,
       });
-      // Loser already lost credits during escrow, so no further action needed here
-      // unless we want to log the loss explicitly in the ledger again? 
-      // No, escrow logged it as WAGER_ESCROW.
+
+      // Broadcast high-stakes victories to Discord
+      if (potSize >= 500) {
+        await sendDiscordNotification({
+          title: 'High-Stakes Victory!',
+          description: `**${winner.username}** has defeated **${loser.username}** in a major wager match!`,
+          color: 0x22c55e, // Green
+          fields: [
+            { name: 'Pot Won', value: `${potSize} Credits`, inline: true },
+            { name: 'Method', value: outcome.method, inline: true },
+          ]
+        });
+      }
     }
 
     // Generate Narrator Commentary

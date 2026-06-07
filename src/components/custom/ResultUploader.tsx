@@ -11,20 +11,79 @@ export function ResultUploader({ matchId }: { matchId: string }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
-      setFile(selectedFile);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPreview(reader.result as string);
-      };
-      reader.readAsDataURL(selectedFile);
+      setLoading(true);
+      try {
+        // Compress image before setting it
+        const compressedFile = await compressImage(selectedFile);
+        setFile(compressedFile);
+        
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setPreview(reader.result as string);
+        };
+        reader.readAsDataURL(compressedFile);
+      } catch (error) {
+        console.error('Compression failed:', error);
+        setFile(selectedFile); // Fallback to original
+      } finally {
+        setLoading(false);
+      }
     }
   };
+
+  /**
+   * Simple client-side compression using Canvas
+   */
+  async function compressImage(file: File): Promise<File> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new window.Image();
+        img.src = event.target?.result as string;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 1280;
+          const MAX_HEIGHT = 720;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+          
+          canvas.toBlob((blob) => {
+            if (blob) {
+              resolve(new File([blob], file.name, { type: 'image/jpeg' }));
+            } else {
+              reject(new Error('Canvas to Blob failed'));
+            }
+          }, 'image/jpeg', 0.8);
+        };
+      };
+      reader.onerror = (error) => reject(error);
+    });
+  }
 
   const handleUpload = async () => {
     if (!file) return;
@@ -86,12 +145,24 @@ export function ResultUploader({ matchId }: { matchId: string }) {
         </div>
       ) : (
         <div 
-          onClick={() => fileInputRef.current?.click()}
-          className="flex flex-col items-center justify-center aspect-video w-full cursor-pointer rounded-2xl border-2 border-dashed border-white/10 bg-white/5 transition-all hover:bg-white/10 hover:border-neon-pink/30"
+          onClick={() => !loading && fileInputRef.current?.click()}
+          className={cn(
+            "flex flex-col items-center justify-center aspect-video w-full cursor-pointer rounded-2xl border-2 border-dashed transition-all",
+            loading ? "border-neon-cyan bg-neon-cyan/5" : "border-white/10 bg-white/5 hover:bg-white/10 hover:border-neon-pink/30"
+          )}
         >
-          <Camera className="h-12 w-12 text-white/20 mb-4" />
-          <p className="text-sm font-bold uppercase tracking-widest text-white/40">Click to upload screenshot</p>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-white/10 mt-2">JPG, PNG up to 10MB</p>
+          {loading ? (
+            <>
+              <Loader2 className="h-12 w-12 text-neon-cyan animate-spin mb-4" />
+              <p className="text-sm font-black uppercase tracking-widest text-neon-cyan">Analyzing File...</p>
+            </>
+          ) : (
+            <>
+              <Camera className="h-12 w-12 text-white/20 mb-4" />
+              <p className="text-sm font-bold uppercase tracking-widest text-white/40">Click to upload screenshot</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-white/10 mt-2">JPG, PNG up to 10MB</p>
+            </>
+          )}
         </div>
       )}
 
