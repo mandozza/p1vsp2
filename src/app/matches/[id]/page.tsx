@@ -5,6 +5,9 @@ import { authOptions } from '@/lib/auth';
 import { redirect, notFound } from 'next/navigation';
 import { Camera, Shield, User, Trophy, Swords, AlertCircle } from 'lucide-react';
 import { ResultUploader } from '@/components/custom/ResultUploader';
+import { OraclePrediction } from '@/components/custom/OraclePrediction';
+import { SideBetForm } from '@/components/custom/SideBetForm';
+import { Bet } from '@/models/Bet';
 import Image from 'next/image';
 
 export default async function MatchDetailsPage({ params }: { params: { id: string } }) {
@@ -24,11 +27,13 @@ export default async function MatchDetailsPage({ params }: { params: { id: strin
   const isDefender = match.defenderId._id.toString() === session.user.id;
   
   if (!isChallenger && !isDefender && session.user.role !== 'admin') {
-    redirect('/matches');
+    // Non-participants can view but not resolve
   }
 
   const userResult = match.results.find((r: any) => r.userId.toString() === session.user.id);
   const opponentResult = match.results.find((r: any) => r.userId.toString() !== session.user.id);
+
+  const existingBet = await Bet.findOne({ matchId: params.id, userId: session.user.id }).lean();
 
   return (
     <div className="container mx-auto px-4 py-12 max-w-4xl">
@@ -49,50 +54,96 @@ export default async function MatchDetailsPage({ params }: { params: { id: strin
         <PlayerProfile player={match.defenderId} label="Defender" />
       </div>
 
+      {/* Oracle Prediction */}
+      <div className="mt-12">
+         <OraclePrediction 
+           prediction={match.prediction} 
+           challengerName={match.challengerId.username} 
+           defenderName={match.defenderId.username} 
+         />
+      </div>
+
       {/* Action Zone */}
       <div className="mt-12">
         {match.status === 'accepted' || match.status === 'awaiting_results' ? (
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-8 backdrop-blur-xl">
-            {userResult ? (
-              <div className="text-center">
-                <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-green-500/10 text-green-500 border border-green-500/20 shadow-[0_0_20px_rgba(34,197,94,0.2)]">
-                  <Shield className="h-10 w-10" />
+          <div className="grid gap-8 lg:grid-cols-3">
+             <div className="lg:col-span-2">
+                <div className="rounded-3xl border border-white/10 bg-white/5 p-8 backdrop-blur-xl h-full">
+                   {userResult ? (
+                     <div className="text-center">
+                       <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-green-500/10 text-green-500 border border-green-500/20 shadow-[0_0_20px_rgba(34,197,94,0.2)]">
+                         <Shield className="h-10 w-10" />
+                       </div>
+                       <h3 className="text-2xl font-black uppercase tracking-tighter text-white italic mb-2">Proof Secured</h3>
+                       <p className="text-sm font-bold uppercase tracking-widest text-white/30 mb-8">
+                         Your screenshot is in the system. {opponentResult ? 'Verifying results...' : 'Waiting for opponent submission.'}
+                       </p>
+                       <div className="relative aspect-video w-full max-w-md mx-auto overflow-hidden rounded-2xl border border-white/10">
+                         <Image 
+                           src={userResult.screenshotUrl} 
+                           alt="Submission proof" 
+                           fill 
+                           className="object-cover opacity-50 grayscale hover:opacity-100 hover:grayscale-0 transition-all cursor-zoom-in" 
+                         />
+                         <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                           <span className="text-[10px] font-black uppercase tracking-widest text-white">Your Submission</span>
+                         </div>
+                       </div>
+                     </div>
+                   ) : isChallenger || isDefender ? (
+                     <div className="space-y-8">
+                       <div className="text-center">
+                         <h3 className="text-2xl font-black uppercase tracking-tighter text-white italic mb-2">Upload Proof</h3>
+                         <p className="text-sm font-bold uppercase tracking-widest text-white/30">
+                           Upload a high-quality screenshot of the final score screen to verify your win.
+                         </p>
+                       </div>
+                       
+                       <ResultUploader matchId={match._id.toString()} />
+                       
+                       <div className="rounded-xl bg-yellow-500/5 border border-yellow-500/20 p-4 flex items-start space-x-3">
+                         <AlertCircle className="h-5 w-5 text-yellow-500 shrink-0 mt-0.5" />
+                         <p className="text-[10px] font-bold text-yellow-500/80 uppercase leading-relaxed">
+                           Make sure the gamer tags and final scores are clearly visible. Fake submissions or low-quality images may result in a reputation penalty.
+                         </p>
+                       </div>
+                     </div>
+                   ) : (
+                      <div className="flex flex-col items-center justify-center h-full text-center py-12">
+                         <Swords className="h-12 w-12 text-white/10 mb-4" />
+                         <h3 className="text-xl font-black uppercase tracking-tighter text-white italic">Arena in Progress</h3>
+                         <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest mt-2 max-w-xs">
+                           The combatants are in the arena. Watch the live ticker for the resolution.
+                         </p>
+                      </div>
+                   )}
                 </div>
-                <h3 className="text-2xl font-black uppercase tracking-tighter text-white italic mb-2">Proof Secured</h3>
-                <p className="text-sm font-bold uppercase tracking-widest text-white/30 mb-8">
-                  Your screenshot is in the system. {opponentResult ? 'Verifying results...' : 'Waiting for opponent submission.'}
-                </p>
-                <div className="relative aspect-video w-full max-w-md mx-auto overflow-hidden rounded-2xl border border-white/10">
-                  <Image 
-                    src={userResult.screenshotUrl} 
-                    alt="Submission proof" 
-                    fill 
-                    className="object-cover opacity-50 grayscale hover:opacity-100 hover:grayscale-0 transition-all cursor-zoom-in" 
+             </div>
+             
+             <div>
+                {!existingBet && !isChallenger && !isDefender ? (
+                  <SideBetForm 
+                    matchId={match._id.toString()} 
+                    challenger={{ id: match.challengerId._id.toString(), username: match.challengerId.username }}
+                    defender={{ id: match.defenderId._id.toString(), username: match.defenderId.username }}
                   />
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-white">Your Submission</span>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-8">
-                <div className="text-center">
-                  <h3 className="text-2xl font-black uppercase tracking-tighter text-white italic mb-2">Upload Proof</h3>
-                  <p className="text-sm font-bold uppercase tracking-widest text-white/30">
-                    Upload a high-quality screenshot of the final score screen to verify your win.
-                  </p>
-                </div>
-                
-                <ResultUploader matchId={match._id.toString()} />
-                
-                <div className="rounded-xl bg-yellow-500/5 border border-yellow-500/20 p-4 flex items-start space-x-3">
-                  <AlertCircle className="h-5 w-5 text-yellow-500 shrink-0 mt-0.5" />
-                  <p className="text-[10px] font-bold text-yellow-500/80 uppercase leading-relaxed">
-                    Make sure the gamer tags and final scores are clearly visible. Fake submissions or low-quality images may result in a reputation penalty.
-                  </p>
-                </div>
-              </div>
-            )}
+                ) : existingBet ? (
+                   <div className="rounded-3xl border border-neon-cyan/20 bg-neon-cyan/5 p-8 text-center h-full flex flex-col items-center justify-center backdrop-blur-xl">
+                      <div className="rounded-2xl bg-neon-cyan/10 p-4 mb-4 border border-neon-cyan/20">
+                         <Coins className="h-8 w-8 text-neon-cyan" />
+                      </div>
+                      <h3 className="text-xl font-black uppercase italic text-white mb-2">Bet Locked</h3>
+                      <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest leading-relaxed">
+                        You backed <span className="text-white">{(match as any)[existingBet.votedForId.toString() === match.challengerId._id.toString() ? 'challengerId' : 'defenderId'].username}</span> for <span className="text-neon-cyan">{existingBet.amount} credits</span>.
+                      </p>
+                   </div>
+                ) : (
+                   <div className="rounded-3xl border border-white/5 bg-white/5 p-8 text-center h-full flex flex-col items-center justify-center opacity-20">
+                      <Shield className="h-10 w-10 mb-4" />
+                      <p className="text-[8px] font-black uppercase tracking-widest">Participants cannot place side-bets</p>
+                   </div>
+                )}
+             </div>
           </div>
         ) : match.status === 'verifying' ? (
           <div className="rounded-3xl border border-white/10 bg-white/5 p-12 text-center backdrop-blur-xl">

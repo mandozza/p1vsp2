@@ -46,6 +46,15 @@ export const MatchSchema = z.object({
   tournamentId: z.string().optional(),
   tournamentRound: z.number().optional(),
   wagerAmount: z.number().int().nonnegative().default(0),
+  prediction: z.object({
+    predictedWinnerId: z.string().optional(),
+    confidence: z.number().optional(), // 0-1
+    analysis: z.string().optional(),
+    odds: z.object({
+      challenger: z.number().default(2.0),
+      defender: z.number().default(2.0),
+    }).optional(),
+  }).optional(),
 });
 
 export type IMatch = z.infer<typeof MatchSchema> & {
@@ -101,6 +110,15 @@ const MatchMongooseSchema = new Schema<IMatchDocument>(
     tournamentId: { type: Schema.Types.ObjectId, ref: 'Tournament' },
     tournamentRound: { type: Number },
     wagerAmount: { type: Number, default: 0 },
+    prediction: {
+      predictedWinnerId: { type: Schema.Types.ObjectId, ref: 'User' },
+      confidence: Number,
+      analysis: String,
+      odds: {
+        challenger: { type: Number, default: 2.0 },
+        defender: { type: Number, default: 2.0 },
+      },
+    },
   },
   { timestamps: true }
 );

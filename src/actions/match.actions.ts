@@ -18,6 +18,7 @@ import { createNotification } from './notification.actions';
 import { checkTournamentProgression } from './tournament.actions';
 import { updateRivalry } from './rivalry.actions';
 import { transferCredits } from '@/lib/economy';
+import { generateMatchPrediction, resolveMatchBets } from './betting.actions';
 import { sendDiscordNotification } from '@/lib/discord';
 
 /**
@@ -93,6 +94,9 @@ export async function acceptChallenge(matchId: string): Promise<ActionResult> {
 
     match.status = 'accepted';
     await match.save();
+
+    // Trigger AI Prediction
+    generateMatchPrediction(matchId);
 
     revalidatePath('/matches');
     return { success: true };
@@ -370,6 +374,9 @@ export async function resolveMatch(
       playerAId: challenger._id.toString(),
       playerBId: defender._id.toString(),
     });
+
+    // Resolve Side-Bets
+    await resolveMatchBets(matchId, winner._id.toString());
 
     return { success: true };
   } catch (error: any) {
