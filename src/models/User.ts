@@ -33,6 +33,7 @@ export const UserSchema = z.object({
   tagPlatform: z.enum(['PSN', 'XBOX', 'STEAM']).optional(),
   verificationStatus: z.enum(['unverified', 'pending', 'verified']).default('unverified'),
   verificationCode: z.string().optional(),
+  pushSubscription: z.any().optional(),
 });
 
 export type IUser = z.infer<typeof UserSchema> & {
@@ -75,6 +76,7 @@ const UserMongooseSchema = new Schema<IUserDocument>(
       default: 'unverified' 
     },
     verificationCode: { type: String },
+    pushSubscription: { type: Schema.Types.Mixed },
   },
   { timestamps: true }
 );

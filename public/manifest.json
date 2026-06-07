@@ -1,0 +1,23 @@
+{
+  "name": "ProProject | Competitive Arcade",
+  "short_name": "ProProject",
+  "description": "High-fidelity competitive gaming verification platform.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#050505",
+  "theme_color": "#ff00ff",
+  "icons": [
+    {
+      "src": "https://picsum.photos/seed/proproject/192/192",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://picsum.photos/seed/proproject/512/512",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

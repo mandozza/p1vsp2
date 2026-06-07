@@ -2,9 +2,11 @@
 
 import dbConnect from '@/lib/db';
 import { Notification } from '@/models/Notification';
+import { User } from '@/models/User';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
+import { sendWebPush } from '@/lib/push';
 
 /**
  * Creates a new personal notification.
@@ -19,6 +21,23 @@ export async function createNotification(data: {
   try {
     await dbConnect();
     const notification = await Notification.create(data);
+
+    // 1. Check for Web Push Subscription
+    const user = await User.findById(data.userId).select('pushSubscription');
+    if (user?.pushSubscription) {
+      const result = await sendWebPush(user.pushSubscription, {
+        title: data.title,
+        body: data.message,
+        url: data.link || '/',
+      });
+
+      // Cleanup if expired
+      if (result?.expired) {
+        user.pushSubscription = undefined;
+        await user.save();
+      }
+    }
+
     return { success: true, id: notification._id };
   } catch (error) {
     console.error('Failed to create notification:', error);
