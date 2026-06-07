@@ -2,6 +2,8 @@
 
 import dbConnect from '@/lib/db';
 import { Match } from '@/models/Match';
+import { Game } from '@/models/Game';
+import { User } from '@/models/User';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
@@ -10,9 +12,11 @@ import { nanoid } from 'nanoid';
 import { getUploadUrl, getPublicUrl } from '@/lib/s3';
 import { extractMatchData, verifyConsensus } from '@/lib/ai-verifier';
 import { calculateElo } from '@/lib/elo';
-import { User } from '@/models/User';
 import { generateCommentary } from '@/lib/narrator';
 import { evaluateMatchAchievements } from './achievement.actions';
+import { createNotification } from './notification.actions';
+import { checkTournamentProgression } from './tournament.actions';
+import { updateRivalry } from './rivalry.actions';
 
 /**
  * Creates a new match challenge.
@@ -31,6 +35,15 @@ export async function createChallenge(defenderId: string, gameId: string): Promi
       challengerId,
       defenderId,
       status: 'pending',
+    });
+
+    // Notify Defender
+    await createNotification({
+      userId: defenderId,
+      type: 'CHALLENGE_RECEIVED',
+      title: 'New Challenge!',
+      message: `${session.user.name} challenged you to a match!`,
+      link: `/matches`,
     });
 
     revalidatePath('/matches');
@@ -142,12 +155,14 @@ export async function submitMatchResult(matchId: string, screenshotUrl: string):
 async function processMatchVerification(matchId: string) {
   try {
     await dbConnect();
-    const match = await Match.findById(matchId);
+    const match = await Match.findById(matchId).populate('gameId');
     if (!match || match.results.length !== 2) return;
 
-    // 1. Extract data from both screenshots using Gemini
+    const game = match.gameId as any;
+
+    // 1. Extract data from both screenshots using dynamic prompts
     const extractions = await Promise.all(
-      match.results.map(r => extractMatchData(r.screenshotUrl))
+      match.results.map(r => extractMatchData(r.screenshotUrl, game.aiPrompt, game.gameType))
     );
 
     // Save extractions to match record
@@ -237,11 +252,42 @@ export async function resolveMatch(
     revalidatePath(`/matches/${matchId}`);
     revalidatePath('/players');
 
+    // Notify both players
+    await Promise.all([
+      createNotification({
+        userId: winner._id.toString(),
+        type: 'MATCH_RESOLVED',
+        title: 'Victory Verified!',
+        message: `Your match against ${loser.username} was resolved. You won!`,
+        link: `/matches/${matchId}`,
+      }),
+      createNotification({
+        userId: loser._id.toString(),
+        type: 'MATCH_RESOLVED',
+        title: 'Match Resolved',
+        message: `Your match against ${winner.username} was resolved. Outcome: Defeat.`,
+        link: `/matches/${matchId}`,
+      }),
+    ]);
+
     // Evaluate Achievements
     await Promise.all([
       evaluateMatchAchievements(winner._id.toString()),
       evaluateMatchAchievements(loser._id.toString()),
     ]);
+
+    // Tournament Progression
+    if (match.tournamentId) {
+      await checkTournamentProgression(match.tournamentId.toString());
+    }
+
+    // Update Rivalry Stats
+    await updateRivalry({
+      matchId,
+      winnerId: winner._id.toString(),
+      playerAId: challenger._id.toString(),
+      playerBId: defender._id.toString(),
+    });
 
     return { success: true };
   } catch (error: any) {

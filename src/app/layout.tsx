@@ -6,6 +6,7 @@ import { SessionProvider } from '@/contexts/SessionProvider';
 import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { MeshGradient } from '@/components/layout/MeshGradient';
+import { GlobalTicker } from '@/components/layout/GlobalTicker';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -30,7 +31,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased pb-12`}
       >
         <SessionProvider>
           <ThemeProvider
@@ -45,6 +46,7 @@ export default function RootLayout({
               <main className="flex-1">{children}</main>
               <Footer />
             </div>
+            <GlobalTicker />
           </ThemeProvider>
         </SessionProvider>
       </body>

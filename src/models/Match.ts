@@ -43,6 +43,8 @@ export const MatchSchema = z.object({
     votedForId: z.string(),
     createdAt: z.date().default(() => new Date()),
   })).default([]),
+  tournamentId: z.string().optional(),
+  tournamentRound: z.number().optional(),
 });
 
 export type IMatch = z.infer<typeof MatchSchema> & {
@@ -95,6 +97,8 @@ const MatchMongooseSchema = new Schema<IMatchDocument>(
         createdAt: { type: Date, default: Date.now },
       }
     ],
+    tournamentId: { type: Schema.Types.ObjectId, ref: 'Tournament' },
+    tournamentRound: { type: Number },
   },
   { timestamps: true }
 );

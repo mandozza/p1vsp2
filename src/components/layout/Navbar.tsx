@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Joystick, Coins, User, Plus } from 'lucide-react';
 import { CreditModal } from '@/components/custom/CreditModal';
+import { NotificationCenter } from '@/components/layout/NotificationCenter';
 import { cn } from '@/lib/utils';
 
 export function Navbar() {
@@ -31,28 +32,33 @@ export function Navbar() {
 
           <div className="hidden md:flex items-center space-x-8">
             <NavLink href="/players" label="Players" />
+            <NavLink href="/leaderboard" label="Leaderboard" />
+            <NavLink href="/tournaments" label="Tournaments" />
             <NavLink href="/matches" label="Matches" />
             <NavLink href="/tribunal" label="Tribunal" />
           </div>
 
           <div className="flex items-center space-x-6">
-            <div className="flex items-center space-x-2">
-              <button 
-                onClick={() => setIsCreditModalOpen(true)}
-                className="group flex items-center space-x-2 rounded-full border border-neon-cyan/30 bg-neon-cyan/10 px-3 py-1.5 shadow-[0_0_10px_rgba(0,255,255,0.1)] transition-all hover:bg-neon-cyan/20 active:scale-95"
-              >
-                <Coins className="h-4 w-4 text-neon-cyan" />
-                <span className="text-sm font-bold text-neon-cyan">
-                  {((session?.user as any)?.creditBalance || 0).toLocaleString()}
-                </span>
-                <div className="rounded-full bg-neon-cyan/20 p-0.5 text-neon-cyan group-hover:bg-neon-cyan group-hover:text-black transition-colors">
-                  <Plus className="h-3 w-3" />
-                </div>
-              </button>
+            <div className="flex items-center space-x-4">
+              <NotificationCenter />
+              <div className="flex items-center space-x-2">
+                <button 
+                  onClick={() => setIsCreditModalOpen(true)}
+                  className="group flex items-center space-x-2 rounded-full border border-neon-cyan/30 bg-neon-cyan/10 px-3 py-1.5 shadow-[0_0_10px_rgba(0,255,255,0.1)] transition-all hover:bg-neon-cyan/20 active:scale-95"
+                >
+                  <Coins className="h-4 w-4 text-neon-cyan" />
+                  <span className="text-sm font-bold text-neon-cyan">
+                    {((session?.user as any)?.creditBalance || 0).toLocaleString()}
+                  </span>
+                  <div className="rounded-full bg-neon-cyan/20 p-0.5 text-neon-cyan group-hover:bg-neon-cyan group-hover:text-black transition-colors">
+                    <Plus className="h-3 w-3" />
+                  </div>
+                </button>
+              </div>
             </div>
 
             {session ? (
-              <Link href="/profile" className="flex items-center space-x-2 text-white/70 hover:text-white transition-colors">
+              <Link href={`/profile/${(session.user as any).username || session.user.id}`} className="flex items-center space-x-2 text-white/70 hover:text-white transition-colors">
                 <div className="h-8 w-8 rounded-full bg-accent flex items-center justify-center border border-white/20">
                   <User className="h-4 w-4" />
                 </div>

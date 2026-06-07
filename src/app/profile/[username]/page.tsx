@@ -2,9 +2,10 @@ import dbConnect from '@/lib/db';
 import { User } from '@/models/User';
 import { Match } from '@/models/Match';
 import { notFound } from 'next/navigation';
-import { Trophy, Swords, Zap, Shield, Target, Activity, ShieldCheck, Gavel } from 'lucide-react';
+import { Trophy, Swords, Zap, Shield, Target, Activity, ShieldCheck, Gavel, Flame, Crown } from 'lucide-react';
 import Image from 'next/image';
 import { getUserAchievements } from '@/actions/achievement.actions';
+import { getUserRivalries } from '@/actions/rivalry.actions';
 import { ACHIEVEMENTS } from '@/lib/achievements.config';
 
 export default async function ProfilePage({ params }: { params: { username: string } }) {
@@ -13,7 +14,10 @@ export default async function ProfilePage({ params }: { params: { username: stri
   const user = await User.findOne({ username: params.username }).lean();
   if (!user) notFound();
 
-  const achievements = await getUserAchievements(user._id.toString());
+  const [achievements, rivalries] = await Promise.all([
+    getUserAchievements(user._id.toString()),
+    getUserRivalries(user._id.toString()),
+  ]);
 
   const matchHistory = await Match.find({
     $or: [{ challengerId: user._id }, { defenderId: user._id }],
@@ -68,6 +72,49 @@ export default async function ProfilePage({ params }: { params: { username: stri
                  <RepStat label="Total Bouts" value={user.stats.wins + user.stats.losses + user.stats.draws} />
               </div>
            </section>
+
+           {rivalries.length > 0 && (
+             <section className="rounded-2xl border border-white/5 bg-arcade-black/40 p-6">
+                <h3 className="text-sm font-black uppercase tracking-widest text-white/40 mb-6 flex items-center space-x-2">
+                   <Flame className="h-4 w-4 text-orange-500" />
+                   <span>Nemesis Watch</span>
+                </h3>
+                <div className="space-y-4">
+                   {rivalries.map((r: any) => {
+                     const isP1 = r.player1Id._id.toString() === user._id.toString();
+                     const rival = isP1 ? r.player2Id : r.player1Id;
+                     const userWins = isP1 ? r.stats.player1Wins : r.stats.player2Wins;
+                     const rivalWins = isP1 ? r.stats.player2Wins : r.stats.player1Wins;
+                     const hasBelt = r.beltHolderId?.toString() === user._id.toString();
+
+                     return (
+                       <div key={r._id.toString()} className="group rounded-xl border border-white/5 bg-white/5 p-4 transition-all hover:border-orange-500/30">
+                          <div className="flex items-center justify-between mb-3">
+                             <span className="text-[10px] font-black uppercase tracking-widest text-white">{rival.username}</span>
+                             {hasBelt && (
+                               <div className="flex items-center space-x-1 rounded-full bg-yellow-500/10 px-2 py-0.5 border border-yellow-500/20">
+                                  <Crown className="h-2 w-2 text-yellow-500" />
+                                  <span className="text-[6px] font-black uppercase text-yellow-500">Belt Holder</span>
+                               </div>
+                             )}
+                          </div>
+                          <div className="flex items-center justify-between">
+                             <div className="flex-1 text-center">
+                                <p className="text-[6px] font-black uppercase text-white/20 mb-1">YOU</p>
+                                <p className="text-xl font-black italic text-white leading-none">{userWins}</p>
+                             </div>
+                             <div className="px-4 text-[8px] font-black text-white/10 uppercase italic">VS</div>
+                             <div className="flex-1 text-center">
+                                <p className="text-[6px] font-black uppercase text-white/20 mb-1">THEM</p>
+                                <p className="text-xl font-black italic text-white/40 leading-none">{rivalWins}</p>
+                             </div>
+                          </div>
+                       </div>
+                     );
+                   })}
+                </div>
+             </section>
+           )}
 
            <section className="rounded-2xl border border-white/5 bg-arcade-black/40 p-6">
               <h3 className="text-sm font-black uppercase tracking-widest text-white/40 mb-6 flex items-center space-x-2">

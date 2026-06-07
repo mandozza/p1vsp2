@@ -6,6 +6,8 @@ export const GameSchema = z.object({
   slug: z.string().min(1).max(100),
   active: z.boolean().default(true),
   thumbnailUrl: z.string().url().optional(),
+  aiPrompt: z.string().optional(),
+  gameType: z.enum(['FIGHTING', 'SPORTS', 'RACING', 'SHOOTER']).default('FIGHTING'),
 });
 
 export type IGame = z.infer<typeof GameSchema> & {
@@ -22,6 +24,12 @@ const GameMongooseSchema = new Schema<IGameDocument>(
     slug: { type: String, required: true, unique: true },
     active: { type: Boolean, required: true, default: true },
     thumbnailUrl: { type: String },
+    aiPrompt: { type: String },
+    gameType: { 
+      type: String, 
+      enum: ['FIGHTING', 'SPORTS', 'RACING', 'SHOOTER'], 
+      default: 'FIGHTING' 
+    },
   },
   { timestamps: true }
 );

@@ -4,6 +4,7 @@ import dbConnect from '@/lib/db';
 import { User } from '@/models/User';
 import { UserAchievement } from '@/models/UserAchievement';
 import { ACHIEVEMENTS } from '@/lib/achievements.config';
+import { createNotification } from './notification.actions';
 
 /**
  * Checks and unlocks match-related achievements for a user.
@@ -44,6 +45,17 @@ export async function evaluateMatchAchievements(userId: string) {
           userId,
           achievementId,
         });
+
+        // Notify the user
+        const achievement = ACHIEVEMENTS[achievementId];
+        await createNotification({
+          userId,
+          type: 'ACHIEVEMENT_UNLOCKED',
+          title: 'Achievement Unlocked!',
+          message: `You earned the ${achievement.name} badge: ${achievement.description}`,
+          link: `/profile`,
+        });
+
         console.log(`🏅 Achievement Unlocked: ${achievementId} for user ${userId}`);
       } catch (err: any) {
         // If E11000 (duplicate key), user already has it, ignore
@@ -75,6 +87,17 @@ export async function evaluateTribunalAchievements(userId: string) {
           userId,
           achievementId: 'TRIBUNAL_JUDGE',
         });
+
+        // Notify the user
+        const achievement = ACHIEVEMENTS['TRIBUNAL_JUDGE'];
+        await createNotification({
+          userId,
+          type: 'ACHIEVEMENT_UNLOCKED',
+          title: 'Achievement Unlocked!',
+          message: `You earned the ${achievement.name} badge: ${achievement.description}`,
+          link: `/profile`,
+        });
+
         console.log(`🏅 Achievement Unlocked: TRIBUNAL_JUDGE for user ${userId}`);
       } catch (err: any) {
         if (err.code !== 11000) console.error('Failed to unlock TRIBUNAL_JUDGE:', err);

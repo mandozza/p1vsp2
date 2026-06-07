@@ -2,12 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Package, Users, Joystick, Truck, TrendingUp, ChevronRight, FlaskConical } from 'lucide-react';
+import { Package, Users, Joystick, Truck, TrendingUp, ChevronRight, FlaskConical, LayoutGrid } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const ADMIN_NAV = [
   { name: 'Intelligence', href: '/admin', icon: TrendingUp },
   { name: 'Beta Command', href: '/admin/beta', icon: FlaskConical },
+  { name: 'Game Protocols', href: '/admin/games', icon: LayoutGrid },
+  { name: 'Tournament Command', href: '/admin/tournaments', icon: Trophy },
   { name: 'Fulfillment', href: '/admin/orders', icon: Truck },
   { name: 'Machines', href: '/admin/machines', icon: Joystick },
   { name: 'Players', href: '/admin/users', icon: Users },
