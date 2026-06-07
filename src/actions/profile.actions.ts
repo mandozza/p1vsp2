@@ -13,11 +13,11 @@ import { getUploadUrl, getPublicUrl } from '@/lib/s3';
 
 const nanoid = customAlphabet('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ', 6);
 
-export async function getProfileUploadUrl(contentType: string) {
+export async function getProfileUploadUrl(type: 'verification' | 'avatar' | 'banner', contentType: string) {
   const session = await getServerSession(authOptions);
   if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-  const filename = `profiles/${session.user.id}/verification-${nanoid()}`;
+  const filename = `profiles/${session.user.id}/${type}-${nanoid()}`;
   const uploadUrl = await getUploadUrl(filename, contentType);
   const publicUrl = getPublicUrl(filename);
 
@@ -109,16 +109,23 @@ export async function updateProfile(data: any) {
   if (!session?.user) throw new Error('Unauthorized');
 
   await dbConnect();
-  await User.findByIdAndUpdate(session.user.id, {
+  const update: any = {
     avatarUrl: data.avatarUrl,
     bannerUrl: data.bannerUrl,
+    bio: data.bio,
     linkedAccounts: {
       psn: data.psn,
       xbox: data.xbox,
       discord: data.discord,
     }
-  });
+  };
+
+  // Remove undefined fields
+  Object.keys(update).forEach(key => update[key] === undefined && delete update[key]);
+
+  await User.findByIdAndUpdate(session.user.id, update);
 
   revalidatePath(`/profile/${(session.user as any).username}`);
+  revalidatePath(`/settings`);
   return { success: true };
 }

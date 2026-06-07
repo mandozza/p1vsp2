@@ -42,11 +42,25 @@ export default async function ProfilePage({ params }: { params: { username: stri
   return (
     <div className="container mx-auto px-4 py-12 max-w-6xl">
       {/* Profile Header */}
-      <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/5 p-8 backdrop-blur-xl mb-12">
-        <div className="flex flex-col md:flex-row items-center gap-8 relative z-10">
+      <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/5 backdrop-blur-xl mb-12">
+        {/* Banner */}
+        <div className="absolute inset-0 h-48 w-full overflow-hidden">
+           {user.bannerUrl ? (
+             <Image src={user.bannerUrl} alt="Banner" fill className="object-cover opacity-40" />
+           ) : (
+             <div className="h-full w-full bg-gradient-to-r from-neon-pink/10 to-neon-cyan/10" />
+           )}
+           <div className="absolute inset-0 bg-gradient-to-t from-arcade-black to-transparent" />
+        </div>
+
+        <div className="flex flex-col md:flex-row items-center gap-8 relative z-10 p-8 pt-24 md:pt-32">
           <div className="h-32 w-32 rounded-3xl bg-neon-pink p-1 glow-pink">
-             <div className="h-full w-full rounded-2xl bg-arcade-black flex items-center justify-center">
-                <span className="text-5xl font-black text-white uppercase italic">{user.username[0]}</span>
+             <div className="h-full w-full rounded-2xl bg-arcade-black flex items-center justify-center relative overflow-hidden">
+                {user.avatarUrl ? (
+                  <Image src={user.avatarUrl} alt="Avatar" fill className="object-cover" />
+                ) : (
+                  <span className="text-5xl font-black text-white uppercase italic">{user.username[0]}</span>
+                )}
              </div>
           </div>
 
@@ -61,12 +75,19 @@ export default async function ProfilePage({ params }: { params: { username: stri
                  </div>
                )}
             </div>
-            <div className="flex flex-wrap items-center justify-center md:justify-start gap-4">
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 mb-4">
                <Badge icon={Shield} label={user.role === 'admin' ? 'Operator' : 'Member'} color="purple" />
+               {user.linkedAccounts?.discord && <span className="text-[8px] font-black text-white/20 uppercase tracking-widest border border-white/5 px-2 py-1 rounded-lg">Discord: {user.linkedAccounts.discord}</span>}
             </div>
+            
+            {user.bio && (
+               <p className="max-w-md text-xs font-bold text-white/60 uppercase leading-relaxed tracking-widest italic">
+                  "{user.bio}"
+               </p>
+            )}
           </div>
 
-          <div className="grid grid-cols-2 gap-4 w-full md:w-auto">
+          <div className="grid grid-cols-2 gap-4 w-full md:w-auto self-end">
              <ProfileStat label="Victories" value={user.stats.wins} color="pink" />
              <ProfileStat label="Defeats" value={user.stats.losses} color="white" />
           </div>

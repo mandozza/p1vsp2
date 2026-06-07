@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Joystick, Coins, User, Plus } from 'lucide-react';
+import { Joystick, Coins, User, Plus, Settings } from 'lucide-react';
 import { CreditModal } from '@/components/custom/CreditModal';
 import { NotificationCenter } from '@/components/layout/NotificationCenter';
 import { cn } from '@/lib/utils';
@@ -58,7 +58,14 @@ export function Navbar() {
             </div>
 
             {session ? (
-              <Link href={`/profile/${(session.user as any).username || session.user.id}`} className="flex items-center space-x-2 text-white/70 hover:text-white transition-colors">
+              <div className="flex items-center space-x-4">
+                <Link 
+                  href="/settings"
+                  className="rounded-lg bg-white/5 p-2 text-white/40 hover:bg-white/10 hover:text-white transition-all active:scale-95"
+                >
+                  <Settings className="h-4 w-4" />
+                </Link>
+                <Link href={`/profile/${(session.user as any).username || session.user.id}`} className="flex items-center space-x-2 text-white/70 hover:text-white transition-colors">
                 <div className="h-8 w-8 rounded-full bg-accent flex items-center justify-center border border-white/20">
                   <User className="h-4 w-4" />
                 </div>
