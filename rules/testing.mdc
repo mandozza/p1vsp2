@@ -1,0 +1,148 @@
+---
+description: Rules for E2E testing (Playwright) and unit testing (Vitest)
+globs: "*.spec.ts,*.test.ts,e2e/**"
+alwaysApply: true
+emoji: 🧪
+title: Testing Standards
+---
+
+# Cursor Rule: Testing Standards
+
+## Description
+Ensure consistent, reliable, and maintainable test coverage using Playwright (E2E) and Vitest (unit). Tests protect against regressions in core user flows and business logic.
+
+## Rules
+
+---
+
+### 🎯 1. Test What Matters
+- **Rule**: Every new feature must include tests for its critical path. Bug fixes must include a regression test.
+- **Best Practices**:
+  - E2E: Cover the golden-path user flow (happy path through the feature).
+  - Unit: Cover business logic, calculations, and edge cases (market engine, credit math, validation).
+  - Do NOT write tests for trivial getters, simple renders, or framework behavior.
+- **Priority**: Critical
+
+---
+
+### 🏗️ 2. E2E Test Structure (Playwright)
+- **Rule**: E2E tests live in `e2e/` and are organized by domain.
+- **File conventions**:
+  - `e2e/auth.setup.ts` — Shared authentication setup (saves session state).
+  - `e2e/unauth.spec.ts` — Tests that run without authentication.
+  - `e2e/[domain].spec.ts` — Tests grouped by feature area (dashboard, markets, social, admin).
+  - `e2e/admin.spec.ts` — Admin-only tests (run with admin session).
+- **Priority**: High
+
+---
+
+### 🔑 3. Authentication in E2E
+- **Rule**: Use Playwright's `storageState` pattern for authenticated tests. Never log in inside each test.
+- **Best Practices**:
+  - Auth setup runs once per project in `auth.setup.ts`.
+  - Member tests use `e2e/.auth/member.json`.
+  - Admin tests use `e2e/.auth/admin.json`.
+  - Unauthenticated tests run in a separate project with no `storageState`.
+- **Priority**: High
+
+---
+
+### 🎯 4. Locator Strategy
+- **Rule**: Prefer accessible locators over CSS selectors.
+- **Priority order**:
+  1. `getByRole()` — buttons, links, headings, tabs.
+  2. `getByLabel()` — form inputs.
+  3. `locator('[data-testid="..."]')` — when no semantic selector works.
+  4. `locator('button[type="submit"]')` — when multiple same-role elements exist.
+- **Avoid**: Text matchers that match too broadly (`getByText(/Yes|No/)` on a trading page).
+- **Strict mode**: Playwright runs in strict mode — locators that match multiple elements will fail. Use `.first()` only when truly appropriate, prefer narrowing the selector.
+- **Priority**: High
+
+---
+
+### 🔄 5. Test Independence
+- **Rule**: Each test must be independent and not depend on the execution order of other tests.
+- **Best Practices**:
+  - Never rely on database state created by a previous test.
+  - Use seeded data (from `npm run db:seed`) as the shared baseline.
+  - If a test modifies state (e.g., executes a trade), verify within that test — don't assume a later test will validate it.
+- **Priority**: Critical
+
+---
+
+### ⏱️ 6. Timeouts and Waits
+- **Rule**: Never use fixed `sleep()` or arbitrary timeouts. Wait for concrete conditions.
+- **Best Practices**:
+  - Use `page.waitForURL()` after navigation actions.
+  - Use `expect(locator).toBeVisible()` instead of sleeping before assertions.
+  - Use `{ timeout: 10_000 }` on assertions that depend on server actions (trades, DB writes).
+  - Default test timeout is 30s — keep tests fast by asserting on the first meaningful signal.
+- **Priority**: High
+
+---
+
+### 🧪 7. Unit Test Structure (Vitest)
+- **Rule**: Unit tests live co-located with the module they test: `src/lib/foo.test.ts` tests `src/lib/foo.ts`.
+- **Best Practices**:
+  - Use `describe` blocks to group related scenarios.
+  - Test pure functions and business logic, not React rendering.
+  - Mock external dependencies (DB, APIs) only at the boundary.
+  - Assert exact values for math/pricing tests (LMSR, credits, payouts).
+- **Priority**: High
+
+---
+
+### 📝 8. Test Naming
+- **Rule**: Test names describe the behavior, not the implementation.
+- **Best Practices**:
+  - E2E: `'can execute a buy trade'`, `'unauthenticated user is redirected to login'`
+  - Unit: `'returns correct cost for 10 shares at 50% probability'`
+  - Avoid: `'test1'`, `'it works'`, `'should call function X'`
+- **Priority**: Medium
+
+---
+
+### 🚀 9. When to Update Tests
+- **Rule**: Tests must be updated whenever the feature they cover changes.
+- **Triggers**:
+  - New form field added → update register/settings E2E tests.
+  - API response shape changes → update any test asserting on that data.
+  - URL structure changes → update navigation/link assertions.
+  - Model field added → update seed scripts if the field is required.
+- **Priority**: Critical
+
+---
+
+### 🛡️ 10. CI Considerations
+- **Rule**: Tests must be CI-ready (deterministic, no flakiness).
+- **Best Practices**:
+  - E2E config has `retries: 2` in CI and `retries: 0` locally.
+  - Use `forbidOnly: true` in CI to catch `.only` left in commits.
+  - Traces and screenshots are captured only on failure.
+  - The web server is started automatically via `playwright.config.ts` `webServer` option.
+- **Priority**: High
+
+---
+
+### 🔒 11. Infrastructure & Security Utility Coverage
+- **Rule**: All shared security utilities, rate limiters, and service layers MUST have unit tests. These are the highest-value tests — they guard critical runtime behavior that E2E tests can't easily cover.
+- **Required test coverage**:
+  - `src/lib/secure-compare.ts` — edge cases (empty strings, length mismatches, special chars)
+  - `src/lib/api-rate-limit.ts` — limits, window reset, passive cleanup, IP isolation
+  - `src/lib/trade-service.ts` — rejection paths (missing market, insufficient balance/shares), success flow
+  - `src/lib/market-engine.ts` — LMSR math correctness (already covered)
+  - `src/lib/achievement-engine.ts` — threshold detection (already covered)
+- **When adding new infrastructure**: Any new `src/lib/` utility that handles auth, validation, rate limiting, or financial logic MUST ship with a `.test.ts` file covering its edge cases.
+- **Priority**: High
+
+---
+
+### 📋 12. Running Tests
+- **Commands**:
+  - `npm run test:e2e` — Run all E2E tests headless.
+  - `npm run test:e2e:ui` — Interactive UI mode for debugging.
+  - `npm run test:e2e:debug` — Step-through debugger with inspector.
+  - `npx vitest` — Run unit tests in watch mode.
+  - `npx vitest run` — Run unit tests once (CI).
+- **Before running E2E**: Ensure database is seeded (`npm run db:seed`) and dev server is accessible.
+- **Priority**: Reference

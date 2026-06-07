@@ -1,0 +1,129 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+---
+description: Rules for Tailwind CSS usage
+globs: "*.tsx,*.css"
+alwaysApply: true
+emoji: 🎨
+title: Tailwind CSS Best Practices
+---
+
+# Cursor Rule: Tailwind CSS Best Practices
+
+## Description
+Ensure efficient, maintainable, and scalable styling using Tailwind CSS. These rules cover utility-first principles, component design, responsiveness, and performance.
+
+## Rules
+
+---
+
+### 🎨 1. Utility-First Approach
+- **Rule**: Use Tailwind's utility-first approach for most styling.
+- **Best Practices**:
+  - Use utility classes for margins, padding, fonts, colors, etc., instead of writing custom CSS
+  - Avoid overloading HTML with too many classes; group similar classes logically
+- **Applies To**: `style`, `components`, `UX`
+- **Priority**: High
+
+---
+
+### 🧱 2. Customizing the Tailwind Configuration
+- **Rule**: Customize Tailwind’s configuration file to align with project requirements.
+- **Best Practices**:
+  - Extend Tailwind’s default config (e.g., colors, spacing, fonts) in `tailwind.config.js`
+  - Use `@tailwindcss/forms`, `@tailwindcss/typography`, and other plugins for added functionality
+- **Applies To**: `config`, `design`, `styling`
+- **Priority**: High
+
+---
+
+### 🔄 3. Responsiveness and Mobile-First Design
+- **Rule**: Prioritize mobile-first design by using Tailwind’s responsive utilities.
+- **Best Practices**:
+  - Use Tailwind’s breakpoint modifiers (`sm:`, `md:`, `lg:`, `xl:`) for responsive design
+  - Start with mobile styles and progressively add responsive variations
+- **Applies To**: `UI`, `layout`, `responsive design`
+- **Priority**: High
+
+---
+
+### 🧼 4. Avoiding Overuse of `!important`
+- **Rule**: Avoid using `!important` unless absolutely necessary.
+- **Best Practices**:
+  - Tailwind utilities should be sufficient for most cases, reducing the need for `!important`
+  - Use `@apply` in CSS files to create reusable components if more complex logic is required
+- **Applies To**: `style`, `CSS`, `maintainability`
+- **Priority**: Medium
+
+---
+
+### 🎯 5. Componentization
+- **Rule**: Create reusable components when you start seeing repeated Tailwind patterns.
+- **Best Practices**:
+  - Use `@apply` in CSS files or `classNames` in JSX for reusable component styles
+  - Avoid repeating the same utility classes across components by creating abstract classes in your stylesheets
+- **Applies To**: `components`, `reuse`, `design system`
+- **Priority**: Medium
+
+---
+
+### ✂️ 6. Minimize Inline Styling
+- **Rule**: Limit inline styles to maintain consistency and ensure readability.
+- **Best Practices**:
+  - Use Tailwind utilities in class attributes rather than inline `style` properties
+  - Extract repetitive inline styles to reusable classes or components
+- **Applies To**: `UX`, `style`, `components`
+- **Priority**: High
+
+---
+
+### 📏 7. Naming Conventions
+- **Rule**: Maintain consistency in naming for custom classes or components.
+- **Best Practices**:
+  - Use `kebab-case` for custom class names, e.g., `button-primary`
+  - Maintain a clear naming convention for components and utilities for easy collaboration
+- **Applies To**: `naming`, `style`, `conventions`
+- **Priority**: Medium
+
+---
+
+### 🧳 8. Purging Unused CSS
+- **Rule**: Enable purging of unused CSS for production builds to keep bundle sizes small.
+- **Best Practices**:
+  - Enable the purge option in `tailwind.config.js` for production builds
+  - Ensure that unused CSS selectors are removed to optimize page load times
+- **Applies To**: `build`, `performance`, `optimization`
+- **Priority**: Critical
+
+---
+
+### 🖌 9. Tailwind with CSS Grid & Flexbox
+- **Rule**: Use Tailwind’s grid and flex utilities to design layouts, but be mindful of complexity.
+- **Best Practices**:
+  - Use `grid` for complex layouts and `flex` for simpler, one-dimensional designs
+  - Keep layouts consistent with `gap` and `justify` utilities
+- **Applies To**: `layout`, `UI`, `performance`
+- **Priority**: Medium
+
+---
+
+### ⚡ 10. Performance Optimization
+- **Rule**: Focus on performance optimization using Tailwind's utilities and efficient class merging.
+- **Best Practices**:
+  - Use Tailwind’s built-in utilities for colors, spacing, and typography rather than custom CSS
+  - Use `group` and `group-hover` for hover states to avoid redundant classes
+- **Applies To**: `performance`, `UX`, `layout`
+- **Priority**: High
+
+---
+
+### 💡 11. Dark Mode
+- **Rule**: Ensure dark mode is supported and correctly implemented with Tailwind's `dark:` variant.
+- **Best Practices**:
+  - Leverage Tailwind’s built-in dark mode utilities for seamless theme switching
+  - Test for contrast and accessibility issues between light and dark themes
+- **Applies To**: `theme`, `UX`, `accessibility`
+- **Priority**: High

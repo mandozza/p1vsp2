@@ -1,0 +1,45 @@
+---
+description: Rule for introducing and planning new features
+globs: 
+alwaysApply: true
+emoji: 🗺️
+title: Feature Planning and Introduction
+---
+
+# Cursor Rule: Feature Planning and Introduction
+
+## Description
+Ensure a consistent and structured approach whenever a new feature is introduced. Before writing any code for a brand-new feature, it must be planned properly using the established templates and directory structure.
+
+## Rules
+
+---
+
+### 📝 1. Use the Planning Template
+- **Rule**: All new features must be initially drafted as a markdown file in the `plans/future/` directory.
+- **Best Practices**:
+  - Always copy the structure from `plans/future/_template.md` when defining a new feature.
+  - The feature markdown file should be named descriptively (e.g., `user-profiles.md`, `payment-integration.md`).
+- **Applies To**: `new features`, `planning`, `epics`
+- **Priority**: Critical
+
+---
+
+### 🎯 2. Define Scope and Checklists
+- **Rule**: Break down the feature into granular, actionable checklists.
+- **Best Practices**:
+  - Define clear requirements and outline edge cases or limitations in the feature overview.
+  - Separate tasks into logical phases (e.g., Database, Backend/API, Frontend/UI, Testing).
+  - Use markdown checklists (`- [ ]`) to track progress seamlessly.
+- **Applies To**: `task management`, `scope definition`
+- **Priority**: High
+
+---
+
+### 🚧 3. Approval Before Execution
+- **Rule**: Do not begin writing application code for a new feature until the feature plan is finalized and approved.
+- **Best Practices**:
+  - Ensure any "Open Questions" in the feature plan are answered.
+  - Wait for explicit user confirmation that the proposed plan and checklist look correct before proceeding to code execution.
+- **Applies To**: `execution`, `workflow`
+- **Priority**: High

@@ -1,0 +1,149 @@
+---
+description: SEO requirements for all pages and components in the Next.js App Router
+globs: "src/app/**/page.tsx,src/app/**/layout.tsx"
+alwaysApply: true
+emoji: 🔍
+title: SEO & Metadata Standards
+---
+# Cursor Rule: SEO & Metadata Standards
+
+## Description
+Ensure all pages are optimized for search engines, social sharing, and discoverability. These rules apply to Next.js App Router pages and layouts using the Metadata API.
+
+## Rules
+
+---
+
+### 📄 1. Page Metadata (Required)
+- **Rule**: Every `page.tsx` MUST export either:
+  - A static `metadata` object, OR
+  - A `generateMetadata()` function for dynamic pages
+- **Must include**:
+  - `title` — unique, descriptive, under 60 characters. Use template format: `"Page Name - PaperBets"`
+  - `description` — compelling summary, 120-160 characters, includes primary keyword
+- **Example**:
+  ```typescript
+  export const metadata = {
+    title: 'Markets - PaperBets',
+    description: 'Browse open prediction markets on politics, tech, crypto, sports and more. Trade with virtual credits.',
+  };
+  ```
+
+---
+
+### 🏗️ 2. Layout Metadata Template
+- **Rule**: The root `layout.tsx` MUST define a metadata template so child pages inherit consistent formatting:
+  ```typescript
+  export const metadata = {
+    title: { template: '%s - PaperBets', default: 'PaperBets - Paper Trading Prediction Markets' },
+    description: '...',
+  };
+  ```
+- Child pages then only need: `title: 'Markets'` → renders as "Markets - PaperBets"
+
+---
+
+### 🔗 3. Dynamic Pages (generateMetadata)
+- **Rule**: Pages with dynamic content (`[slug]`, `[userId]`) MUST use `generateMetadata()`:
+  - Fetch the entity and use its title/name in the page title
+  - Include relevant details in the description
+  - Return `notFound()` metadata for missing entities
+- **Example**:
+  ```typescript
+  export async function generateMetadata({ params }) {
+    const market = await getMarket(params.slug);
+    if (!market) return { title: 'Not Found' };
+    return {
+      title: market.title,
+      description: `Trade on "${market.title}" — currently ${Math.round(market.priceYes * 100)}% Yes. ${market.totalVolume} credits traded.`,
+    };
+  }
+  ```
+
+---
+
+### 🖼️ 4. Open Graph & Social Cards
+- **Rule**: Public-facing pages SHOULD include Open Graph metadata for social sharing:
+  - `openGraph.title` — same as page title
+  - `openGraph.description` — same as description
+  - `openGraph.type` — `'website'` for pages, `'article'` for market detail
+  - `openGraph.siteName` — `'PaperBets'`
+- **Optional but recommended**:
+  - `openGraph.images` — OG image (1200x630px) for key pages
+  - `twitter.card` — `'summary_large_image'` when OG image exists
+
+---
+
+### 📐 5. Semantic HTML Structure
+- **Rule**: Every page MUST follow this heading hierarchy:
+  - One `<h1>` per page (the primary title)
+  - `<h2>` for major sections
+  - `<h3>` for subsections
+  - Never skip levels (no h1 → h3)
+- **Rule**: Use semantic elements:
+  - `<main>` for primary content (handled in layout)
+  - `<nav>` for navigation sections
+  - `<article>` for standalone content (wiki pages, market detail)
+  - `<section>` for thematic groupings
+  - `<footer>` for footer (handled in layout)
+
+---
+
+### 🔗 6. Links & Anchor Text
+- **Rule**:
+  - Use descriptive anchor text — never "click here" or "read more" alone
+  - Internal links use `<Link>` from `next/link` (client-side navigation + prefetch)
+  - External links use `target="_blank"` with `rel="noopener noreferrer"`
+  - Paginated/filtered content should use URL search params (not client state) for crawlability
+
+---
+
+### 🖼️ 7. Images
+- **Rule**:
+  - All `<Image>` tags MUST have descriptive `alt` text
+  - Decorative images: `alt=""` (empty string, not omitted)
+  - Use `next/image` for automatic optimization (WebP, srcset, lazy loading)
+  - Include `width` and `height` or `fill` to prevent layout shift
+
+---
+
+### 🗺️ 8. URL Structure
+- **Rule**:
+  - URLs should be human-readable and descriptive: `/markets/will-btc-hit-100k` not `/markets/abc123`
+  - Use hyphens as separators, never underscores or camelCase in URLs
+  - Keep URLs short — 3-5 path segments max
+  - Avoid query params for core content; use them only for filters/sorts
+
+---
+
+### 🤖 9. Robots & Crawling
+- **Rule**:
+  - Authenticated pages (`/dashboard`, `/settings`, `/notifications`) should NOT be indexed
+  - Public pages (`/markets`, `/wiki`, `/how-it-works`, `/leaderboard`) SHOULD be indexed
+  - Add `robots: { index: false }` to metadata for private pages
+  - Consider a `sitemap.ts` for public pages if the site has 50+ public URLs
+
+---
+
+### ⚡ 10. Performance for SEO
+- **Rule** (these directly impact Core Web Vitals / ranking):
+  - Use Server Components by default (faster TTFB, no JS needed for static content)
+  - Lazy load below-the-fold content with `dynamic()` or `loading.tsx`
+  - Reserve space for async content (prevent CLS) — use skeletons with matching dimensions
+  - Avoid render-blocking JS in the critical path
+  - Images above the fold: set `priority` prop on `next/image`
+
+---
+
+## Pre-Delivery Checklist
+
+Before shipping any new page:
+
+- [ ] Has unique `title` (under 60 chars) and `description` (120-160 chars)
+- [ ] Dynamic pages use `generateMetadata()`
+- [ ] Single `<h1>`, proper heading hierarchy
+- [ ] All images have `alt` text
+- [ ] Internal links use `<Link>`, external use `target="_blank" rel="noopener noreferrer"`
+- [ ] Authenticated pages have `robots: { index: false }`
+- [ ] URL is human-readable with hyphens
+- [ ] Page renders meaningful content without JavaScript (SSR/RSC)

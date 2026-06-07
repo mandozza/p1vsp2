@@ -1,0 +1,348 @@
+---
+description: Rules for Next.js and React development (App Router Focus)
+globs: "*.tsx,*.ts"
+alwaysApply: true
+emoji: ⚛️
+title: Next.js & React Best Practices
+---
+# Cursor Rule: Next.js & React Best Practices
+
+## Description
+Ensure clean, performant, and scalable code when working with React and Next.js App Router. These rules cover component architecture, data fetching, state management, Server Actions, Route Handlers, accessibility, and modern performance optimizations.
+
+## Rules
+
+---
+
+### 🧱 1. Component Architecture
+- **Rule**: Favor React Server Components (RSC) by default. Use Client Components (`"use client"`) only when required for interactivity, state, or browser APIs.
+- **Best Practices**:
+  - Keep components small, reusable, and composable.
+  - Place components in `src/components/`. For larger components, use a directory structure: `Button/index.tsx`, `Button/types.ts`.
+  - Type all props explicitly using TypeScript interfaces.
+  - Clearly document props and variant behaviors in JSDoc blocks.
+
+---
+
+### ⚡ 2. React Server Components (RSC) vs. Client Components
+- **Rule**: Default to Server Components for performance, security, and lower bundle size.
+- **When to use Server Components**:
+  - Fetching data directly from database or backend.
+  - Accessing backend resources directly (e.g. file system, secrets).
+  - Keeping large dependencies server-side to improve load times.
+- **When to use Client Components (`"use client"`)**:
+  - Using event listeners (e.g. `onClick`, `onChange`).
+  - Using state and lifecycle hooks (e.g. `useState`, `useEffect`, `useReducer`).
+  - Using browser-only APIs (e.g. `window`, `localStorage`).
+  - Using custom hooks that depend on client-side state.
+
+---
+
+### 🔄 3. Server Actions & Form Mutations
+- **Rule**: Use Next.js **Server Actions** for form submissions, state mutations, and data actions closely coupled with the UI.
+- **Best Practices**:
+  - Secure actions with appropriate authentication and authorization checks (e.g. checking sessions using NextAuth).
+  - Always validate inputs at the start of the action using **Zod**.
+  - Return consistent objects containing success indicators, serialized data, or error lists.
+  - Implement loading states with `useTransition` or form status hooks (`useFormStatus`).
+  - Revalidate cache using `revalidatePath` or `revalidateTag` to keep data current.
+- **Applies To**: `mutations`, `forms`, `actions`
+- **Priority**: Critical
+
+---
+
+### 🛠 4. Route Handlers (APIs)
+- **Rule**: Use Route Handlers (`app/api/.../route.ts`) only for external integrations, third-party webhooks, public endpoints, or manual file generation/downloads.
+- **Best Practices**:
+  - Move business logic into reusable services (`src/lib/services/` or `src/lib/utils/`) so the route files remain thin.
+  - Validate all query parameters and request bodies using **Zod**.
+  - Return JSON responses with standardized status codes (e.g., `200 OK`, `201 Created`, `400 Bad Request`, `401 Unauthorized`, `500 Internal Server Error`).
+- **Applies To**: `api`, `webhooks`, `route-handlers`
+- **Priority**: High
+
+---
+
+### 🎯 5. Client-Side State Management
+- **Rule**: Start with standard local React state. Leverage React Context for light client state and global stores (like Zustand) for complex, application-wide state.
+- **Best Practices**:
+  - `useState` and `useReducer` for component-level control.
+  - React Context + `useReducer` for simple UI state shared within a subtree.
+  - Zustand for highly collaborative, cross-component, or global application state.
+- **Applies To**: `hooks`, `context`, `stores`
+- **Priority**: Medium
+
+---
+
+### 🌐 6. Routing & Navigation
+- **Rule**: Leverage Next.js App Router dynamic routing, file-system conventions, and layouts.
+- **Best Practices**:
+  - Organize routes cleanly within `src/app/` using layouts (`layout.tsx`), pages (`page.tsx`), loading states (`loading.tsx`), and error boundaries (`error.tsx`).
+  - Use `next/link` for internal navigation to benefit from prefetching.
+  - Use `useRouter()` inside Client Components for programmatic navigation.
+- **Applies To**: `routing`, `app-router`, `layouts`
+- **Priority**: High
+
+---
+
+### 🧼 7. Code Cleanliness & Conventions
+- **Rule**: Enforce TypeScript strict mode, eslint rules, and clean organization.
+- **Best Practices**:
+  - Components: PascalCase.
+  - Files/Folders: kebab-case (except for Next.js folder conventions like `[id]`).
+  - Variables/Functions: camelCase.
+  - Use absolute import alias `@/...` (e.g. `@/components/` or `@/lib/`).
+  - **Never name state variables or local variables after browser globals**: `window`, `document`, `location`, `history`, `event`, `screen`, `navigator`, `name`, `status`. These shadow the global scope, cause TypeScript warnings, and produce subtle runtime bugs (e.g. `useState('3h')` stored as `window` shadows `globalThis.window` in module scope). Use a descriptive prefix instead: `chartWindow`, `currentTab`, `activeEvent`.
+- **Anti-pattern**:
+  ```tsx
+  const [window, setWindow] = useState<ChartWindow>('3h'); // ❌ shadows globalThis.window
+  const [name, setName] = useState('');                     // ❌ shadows globalThis.name
+  ```
+- **Correct**:
+  ```tsx
+  const [chartWindow, setChartWindow] = useState<ChartWindow>('3h'); // ✅
+  const [displayName, setDisplayName] = useState('');                 // ✅
+  ```
+- **Applies To**: `linting`, `formatting`, `typescript`
+- **Priority**: High
+
+---
+
+### ♿ 8. Accessibility (a11y)
+- **Rule**: Ensure all custom interactive elements are fully keyboard navigatable and screen-reader compliant.
+- **Best Practices**:
+  - Use semantic HTML elements (e.g. `<button>`, `<section>`, `<header>`) instead of nested generic `div`s.
+  - Supply explicit `aria-*` tags and proper tap target sizes (min 44x44px).
+  - Always provide `alt` descriptions on images and explicit labels for inputs.
+- **Applies To**: `ui`, `components`, `UX`
+- **Priority**: High
+
+---
+
+### 📦 9. Performance Optimization
+- **Rule**: Optimize rendering and assets for perfect Core Web Vitals.
+- **Best Practices**:
+  - Use Next.js `Image` component (`next/image`) for automatic responsive size generation and WebP formats.
+  - Leverage dynamic imports (`next/dynamic`) to lazy-load massive client-side components.
+  - Utilize data-fetching cache, and revalidate intelligently using revalidation tags.
+- **Applies To**: `rendering`, `caching`, `LCP`, `INP`
+- **Priority**: High
+
+---
+
+### 🔐 10. Security
+- **Rule**: Ensure strict isolation of server-side logic and protect route access.
+- **Best Practices**:
+  - Ensure all database and credentials files use the `"use server"` module boundary or keep them inside separate `src/lib/` files.
+  - Never hardcode secrets. Ensure they are stored in `.env.local` and accessed via `process.env`.
+  - Validate sessions using NextAuth in `src/proxy.ts` (Next.js 16+ route protection) or directly in Server Components before rendering sensitive data.
+- **Applies To**: `auth`, `env`, `security`
+- **Priority**: Critical
+
+---
+
+### 📖 11. Component Documentation (Storybook)
+- **Rule**: Every new UI component MUST be accompanied by a `*.stories.tsx` file inside its directory.
+- **Best Practices**:
+  - Use Storybook Component Story Format (CSF 3.0).
+  - Document all props, interactive states, and responsive layouts.
+  - Include at least a 'Default' state and critical visual variations (e.g. Loading, Error, Disabled).
+- **Applies To**: `components`, `ui`, `documentation`
+- **Priority**: High
+
+---
+
+### 🧊 12. React 19 Render Purity
+- **Rule**: Components and hooks must be idempotent. The render body must produce the same output for the same inputs with no observable side effects.
+- **Forbidden in the render body**:
+  - `ref.current = value` — ref mutations are side effects. Use `useEffect` for commit-phase sync.
+  - `Date.now()` / `Math.random()` / `new Date()` — non-deterministic. In server components, use `new Date()` and mutate it (`setDate`) instead of arithmetic on `Date.now()`. In client components, derive in `useEffect` or `useMemo`.
+  - Direct DOM manipulation, network calls, or console.log for debugging state.
+- **Ref reads during render** are also flagged in React 19 strict mode. If you need to compare "previous props" to "current props" during render, use state — not refs.
+- **Correct ref usage**: Read/write refs only inside `useEffect`, event handlers, or callbacks (commit phase). Never during render.
+  ```tsx
+  // BAD — ref mutation during render
+  onNewTradeRef.current = onNewTrade;
+
+  // GOOD — commit-phase sync
+  useEffect(() => { onNewTradeRef.current = onNewTrade; });
+  ```
+- **Applies To**: `hooks`, `components`, `purity`
+- **Priority**: Critical
+
+---
+
+### 🔄 13. Props-to-State Synchronization
+- **Rule**: Never use `useEffect` to sync props into state. This causes a cascading double-render.
+- **Correct patterns** (in order of preference):
+  1. **Derive during render** — compute the value directly from props without state.
+  2. **Key-based reset** — parent provides a `key` that changes when data resets: `<Child key={id} initialData={data} />`.
+  3. **State comparison during render** — for "initial prop + local mutations" (e.g., server data + polling):
+     ```tsx
+     const [local, setLocal] = useState(prop);
+     const [prevProp, setPrevProp] = useState(prop);
+
+     if (prevProp !== prop) {
+       setPrevProp(prop);
+       setLocal(prop);
+     }
+     ```
+     React supports `setState` during render when guarded by a condition that prevents infinite loops. This is synchronous — no second render cycle.
+- **Why NOT refs for previous-prop tracking**: React 19 flags ref reads/writes during render as impure. Use state pairs instead.
+- **Anti-pattern**:
+  ```tsx
+  // BAD — cascading render via effect
+  useEffect(() => { setLocalState(prop); }, [prop]);
+
+  // BAD — ref read/write during render (React 19 purity violation)
+  const prevRef = useRef(prop);
+  if (prevRef.current !== prop) { prevRef.current = prop; setLocal(prop); }
+  ```
+- **Applies To**: `hooks`, `state`, `performance`
+- **Priority**: High
+
+---
+
+### ⚡ 14. useEffect Rules (React 19 Strict)
+- **Rule**: Effects must not call `setState` synchronously in their body. State updates inside effects must happen in async callbacks, event subscriptions, or cleanup — never at the top level of the effect.
+- **Why**: Synchronous `setState` in an effect body triggers a cascading render (effect runs → setState → re-render → effect runs again). React 19's `react-hooks/set-state-in-effect` rule catches this.
+- **Forbidden**:
+  ```tsx
+  // BAD — sync setState at top of effect
+  useEffect(() => {
+    setLoading(true);  // ← triggers cascading render
+    fetch(url).then(data => setResults(data));
+  }, [url]);
+  ```
+- **Correct patterns**:
+  ```tsx
+  // GOOD — setState inside async callback (not synchronous in effect body)
+  useEffect(() => {
+    const controller = new AbortController();
+    const timeout = setTimeout(async () => {
+      setLoading(true);
+      const res = await fetch(url, { signal: controller.signal });
+      setResults(await res.json());
+      setLoading(false);
+    }, 200);
+    return () => { clearTimeout(timeout); controller.abort(); };
+  }, [url]);
+
+  // GOOD — setState in event subscription callback
+  useEffect(() => {
+    const es = new EventSource(url);
+    es.onmessage = (e) => setData(JSON.parse(e.data));
+    return () => es.close();
+  }, [url]);
+  ```
+- **Where to put state clearing**: If you need to clear state when inputs change (e.g., clear results when query is too short), do it in the event handler that changes the input — not in an effect:
+  ```tsx
+  // GOOD — clear in handler
+  onValueChange={(v) => {
+    setQuery(v);
+    if (v.length < 2) setResults([]);
+  }}
+  ```
+- **Applies To**: `hooks`, `effects`, `data-fetching`
+- **Priority**: Critical
+
+---
+
+### 🔁 15. Self-Referencing Callbacks & Reconnection
+- **Rule**: When a function needs to call itself (reconnection, retry), declare it as a named function inside `useEffect` — not as a `useCallback` that references its own binding.
+- **Best Practices**:
+  - Declare the function inside the `useEffect` body. This avoids block-scoping issues where the variable is accessed before initialization.
+  - Clean up timers (`clearTimeout`) in the effect's return function to prevent orphaned reconnects on unmount.
+  ```tsx
+  useEffect(() => {
+    let timeout: ReturnType<typeof setTimeout>;
+    function connect() {
+      const es = new EventSource(url);
+      es.onerror = () => { timeout = setTimeout(connect, 5000); };
+    }
+    connect();
+    return () => { clearTimeout(timeout); };
+  }, []);
+  ```
+- **Anti-pattern**: `useCallback` that calls `setTimeout(connect, 5000)` where `connect` is the callback itself — fails lexical scoping rules.
+- **Applies To**: `hooks`, `SSE`, `WebSocket`, `reconnection`
+- **Priority**: High
+
+---
+
+### 📦 16. Next.js 15 Async Params & SearchParams
+- **Rule**: In Next.js 15+, `params` and `searchParams` in Page and Layout components are async Promises. You MUST `await` them before accessing properties.
+- **Correct**:
+  ```typescript
+  export default async function Page({ params }: { params: Promise<{ slug: string }> }) {
+    const { slug } = await params;
+  }
+  ```
+- **Anti-pattern**: `const slug = params.slug` — will fail at runtime or produce type errors.
+- **Applies To**: `pages`, `layouts`, `generateMetadata`
+- **Priority**: Critical
+
+---
+
+### 🔄 17. Server Action Return Types
+- **Rule**: Server Actions must ONLY return serializable DTOs using the `ActionResult<T>` pattern (`{ success: true, data }` or `{ success: false, error }`). Never return `NextResponse` instances from server actions.
+- **Best Practices**:
+  - `NextResponse.json()` is for Route Handlers (`app/api/*/route.ts`) only.
+  - Server Actions serialize their return value over the wire — `NextResponse` objects cannot be serialized.
+  - Always type returns as `Promise<ActionResult<T>>`.
+- **Applies To**: `actions`, `server-actions`
+- **Priority**: High
+
+---
+
+### 🚫 18. `'use server'` Export Restrictions
+- **Rule**: Files marked with `'use server'` can ONLY export async functions. Exporting interfaces, types, constants, or objects from a server action file will crash at build time.
+- **Best Practices**:
+  - Keep shared types/interfaces in `src/types/` or co-located with models.
+  - Keep shared constants in `src/lib/constants.ts`.
+  - If a server action needs a typed config shape, define the type inline in the function signature (`config: { pollIntervalMs?: number }`) or import from a non-`'use server'` file.
+- **Anti-pattern**:
+  ```typescript
+  'use server';
+  export interface DashboardConfig { ... } // ❌ Crashes: not an async function
+  export const DEFAULT_CONFIG = { ... };   // ❌ Crashes: not an async function
+  export async function getConfig() { ... } // ✅ Fine
+  ```
+- **Applies To**: `actions`, `server-actions`
+- **Priority**: Critical
+
+---
+
+### 🔄 17. Hard Navigation After Server Mutations
+- **Rule**: After a server action writes data that affects the current page's server-side redirect logic, use `window.location.href` instead of `router.push()` to navigate.
+- **Why**: Next.js client-side router caches RSC payloads. If a server action sets a flag (e.g., `onboardedAt`) and then `router.push('/admin')` fires, the admin page may serve a stale cached response that still thinks the flag is unset — causing redirect loops.
+- **When to use `window.location.href`**:
+  - After writing a value that a server component uses in a `redirect()` check.
+  - After completing onboarding, changing roles, or toggling access flags.
+  - When the target page has server-side guards that read the just-written data.
+- **When `router.push()` is fine**:
+  - Navigating between pages that don't have server-side redirect guards.
+  - The mutation doesn't affect the target page's render logic.
+- **Applies To**: `navigation`, `mutations`, `onboarding`
+- **Priority**: High
+
+---
+
+### 🗄️ 18. React `cache()` for Mongoose Query Dedup
+- **Rule**: When the same Mongoose query is needed by both `generateMetadata()` and the page component (or multiple server components in one request), wrap it in React's `cache()` to deduplicate.
+- **Why**: Next.js auto-deduplicates `fetch()` calls but NOT direct DB queries. Without `cache()`, the same query runs twice per page request.
+- **Best Practices**:
+  - Create a `getXByY.ts` file co-located with the page that uses it.
+  - Export a `cache()`-wrapped async function.
+  - Import and call it from both `generateMetadata` and the page component.
+  - `cache()` only works in server components/functions — NOT in `'use server'` action files.
+  ```typescript
+  // src/app/markets/[slug]/getMarket.ts
+  import { cache } from 'react';
+  export const getMarketBySlug = cache(async (slug: string) => {
+    await dbConnect();
+    return Market.findOne({ slug }).lean();
+  });
+  ```
+- **When to use**: Any page with `generateMetadata` + a component that both need the same DB record.
+- **Applies To**: `pages`, `metadata`, `performance`
+- **Priority**: Medium

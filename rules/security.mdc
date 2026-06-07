@@ -1,0 +1,323 @@
+---
+description: Security requirements for all API routes, server actions, and data handling
+globs: "src/app/api/**/*.ts,src/actions/**/*.ts,src/app/**/route.ts"
+alwaysApply: true
+emoji: 🔒
+title: Security Standards
+---
+# Cursor Rule: Security Standards
+
+## Description
+Prevent OWASP Top 10 vulnerabilities, protect user data, and ensure all endpoints are hardened against common attack vectors. These rules apply to every API route, server action, and data-handling function.
+
+## Rules
+
+---
+
+### 🔐 1. Authentication on Every Endpoint
+- **Rule**: Every API route and server action that reads or writes user-specific data MUST verify the session.
+- **Best Practices**:
+  - Use `getServerSession(authOptions)` at the top of every handler.
+  - Return 401 immediately if no session — never fall through to DB queries.
+  - Admin-only actions MUST additionally check `session.user.role === 'admin'`.
+  - Public endpoints (market listing, search) are the ONLY exception — document why they're public.
+- **Never**: Assume a request is authenticated because middleware "should have" blocked it. Defense in depth.
+
+---
+
+### 🛡️ 2. Input Validation at Every Boundary
+- **Rule**: All user input MUST be validated with Zod before reaching business logic or database queries.
+- **Best Practices**:
+  - Define a Zod schema for every server action's input.
+  - Validate URL params, query strings, and request bodies.
+  - Set maximum lengths on all string inputs (prevent memory exhaustion).
+  - Reject unexpected fields — use `.strict()` on Zod objects where appropriate.
+- **Never**: Pass `formData.get()` directly into a DB query without validation.
+
+---
+
+### ⏱️ 3. Rate Limiting
+- **Rule**: Every public-facing API endpoint MUST be rate-limited.
+- **Best Practices**:
+  - Use IP-based rate limiting via `checkRateLimit()` from `@/lib/api-rate-limit`.
+  - Default: 60 requests per minute per IP for read endpoints.
+  - Stricter limits for write endpoints: 10-20 per minute.
+  - Auth endpoints (login, register): 5 attempts per minute per IP.
+  - Return HTTP 429 with a clear error message when exceeded.
+  - Add `X-RateLimit-Remaining` header in responses when practical.
+- **Never**: Deploy a public GET endpoint without rate limiting.
+
+---
+
+### 🔍 4. Regex & Query Safety
+- **Rule**: Never pass raw user input into a regex or database query operator.
+- **Best Practices**:
+  - Always escape special regex characters before using `$regex`: `str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')`
+  - Set maximum query lengths (100 chars for search, 200 for text fields).
+  - Prefer MongoDB text indexes (`$text`) over `$regex` for search at scale.
+  - Never use `$where`, `$expr` with user input, or allow arbitrary query operators.
+- **Attack Vector**: ReDoS (Regular Expression Denial of Service) — a crafted pattern like `(a+)+b` can freeze the thread.
+
+---
+
+### 🆔 5. IDOR Prevention (Insecure Direct Object References)
+- **Rule**: Accessing another user's data MUST be explicitly authorized.
+- **Best Practices**:
+  - Always verify `userId === session.user.id` OR the resource is intentionally public.
+  - For social features (followers, profiles): decide if public or auth-required, document it.
+  - Admin endpoints: verify role on every request, not just in middleware.
+  - Never expose internal MongoDB `_id` values that could enable enumeration — use slugs for public URLs.
+- **Attack Vector**: Attacker changes `userId` in the URL to access someone else's private data.
+
+---
+
+### 📁 6. File Upload Security
+- **Rule**: All file uploads MUST validate both the declared MIME type AND the actual file content.
+- **Best Practices**:
+  - Check MIME type against an allowlist (`image/jpeg`, `image/png`, `image/webp`).
+  - Validate magic bytes (file header) to confirm content matches declared type.
+  - Enforce file size limits (2MB for avatars, define per use case).
+  - Generate a safe filename server-side — never use the user's original filename.
+  - Store in object storage (S3), never in the public directory.
+  - Set `Content-Disposition: attachment` on downloads to prevent XSS.
+- **Attack Vector**: Upload an SVG with embedded `<script>` tags disguised as a JPEG.
+
+---
+
+### ⏰ 7. Timing-Safe Comparisons
+- **Rule**: All secret/token comparisons MUST use constant-time comparison with fixed-length hashing.
+- **Best Practices**:
+  - Hash both inputs with SHA-256 before comparing. This guarantees equal buffer lengths and eliminates timing leaks from early length-mismatch returns.
+  - Use the shared utility `secureCompare` from `@/lib/secure-compare`.
+  - Never use `===` or `!==` for secret comparison.
+- **Anti-pattern**: `if (a.length !== b.length) return false` before `timingSafeEqual` — this leaks the token length via response timing.
+- **Correct pattern**:
+  ```typescript
+  import { secureCompare } from '@/lib/secure-compare';
+  // Internally: SHA-256 both → crypto.timingSafeEqual on 32-byte hashes
+  ```
+- **Attack Vector**: Timing attacks measure response time differences to determine secret length, then brute-force character-by-character.
+
+---
+
+### 🌐 8. CORS & Headers
+- **Rule**: API routes should set appropriate security headers.
+- **Best Practices**:
+  - Next.js handles CORS by default — don't override with `Access-Control-Allow-Origin: *` on authenticated endpoints.
+  - Set `Cache-Control: private, no-store` on user-specific data responses.
+  - Public data can use `Cache-Control: public, s-maxage=X, stale-while-revalidate=Y`.
+  - Consider `X-Content-Type-Options: nosniff` on file serving endpoints.
+
+---
+
+### 💰 9. Financial Integrity
+- **Rule**: All credit-modifying operations MUST be atomic and audited.
+- **Best Practices**:
+  - Use MongoDB transactions (`startSession()` + `startTransaction()`) for multi-document credit operations.
+  - Pass `.session(txSession)` to EVERY query inside the transaction — including reads. A read without the session sees uncommitted state from outside the transaction (transaction leak).
+  - Write to CreditLedger on every balance change — this is the audit trail.
+  - The `balance` field in CreditLedger MUST be the user's real post-transaction balance. Never hardcode `0` or guess.
+  - Never modify `creditBalance` directly without a corresponding ledger entry.
+  - Validate sufficient balance INSIDE the transaction (prevent race conditions).
+  - For idempotent claims (daily refill, one-time rewards), use atomic `findOneAndUpdate` with eligibility in the filter — never read-check-write.
+  - Check for negative results after arithmetic — credits can never go below 0.
+  - For sell/refund P&L: calculate `realizedPnl = proceeds - costBasis`, not gross proceeds. Decrement `totalInvested` proportionally.
+- **Attack Vectors**:
+  - **Double-spend**: Send 2+ simultaneous buy requests where each costs ~90% of balance. Both pass the pre-transaction balance check, both decrement via `$inc`, user goes negative.
+  - **Share duplication**: Send 3+ simultaneous sell requests for all shares. Each reads the full share count before the others write, all decrements succeed, user sells 3x their holdings.
+  - **Daily refill double-claim**: Two concurrent requests both read `lastDailyRefill` as stale.
+- **Defense**: ALWAYS use `findOneAndUpdate` with the constraint in the FILTER (not just in a pre-check). The database enforces atomicity — if the filter doesn't match at write time, the update returns null.
+- **Agent isolation**: Any system that rewards users based on other users' activity (referrals, social bonuses) MUST filter out `paper_agent` and `agent` roles. Automated agents must never trigger real-user rewards.
+- **Null-user guard**: When crediting a user via `findByIdAndUpdate`, ALWAYS check the return value. If `null`, throw and abort — never fallback to `?? 0` in ledger entries. A silent null creates un-auditable balance drift.
+- **Math overflow guard**: LMSR calculations that use `Math.exp()` MUST validate that the exponent stays below 700 (JS float64 limit ~709). Reject trades where `|qYes - qNo| / b > 700` before computing. Without this, attackers can craft payloads that produce `Infinity`, corrupting market state in the DB.
+- **Config race conditions**: Settings updates (AppSettings) MUST use atomic dot-notation `$set` (`value.fieldName`) — never read-merge-write. Concurrent admin updates on different fields overwrite each other in the read-merge-write pattern.
+
+---
+
+### 🔑 10. Secrets & Environment
+- **Rule**: Secrets must never be exposed to the client.
+- **Best Practices**:
+  - All secrets in `.env.local` only — never commit `.env` files.
+  - Variables without `NEXT_PUBLIC_` prefix are server-only (enforced by Next.js).
+  - If a secret is undefined at runtime, REJECT the request — never proceed with empty string fallback.
+  - Rotate secrets periodically (CRON_SECRET, NEXTAUTH_SECRET).
+  - Use different secrets per environment (dev/staging/prod).
+
+---
+
+### 🧹 11. Data Exposure Prevention
+- **Rule**: Never return more data than the client needs.
+- **Best Practices**:
+  - Use `.select()` on all Mongoose queries — only fetch fields needed for the response.
+  - Never return `passwordHash`, internal IDs, or admin-only fields to non-admin users.
+  - Sanitize error messages — never expose stack traces, DB connection strings, or internal paths.
+  - Use `.lean()` to strip Mongoose internals from responses.
+
+---
+
+### 🚪 12. Login & Authentication Hardening
+- **Rule**: Authentication endpoints MUST resist brute-force and credential stuffing attacks.
+- **Best Practices**:
+  - Rate limit login: max 5 failed attempts per email, then 15-minute lockout.
+  - Track per-email (not per-IP) — attackers rotate IPs easily.
+  - Clear attempt counter on successful login.
+  - Never reveal whether an email exists — return the same error for bad email vs bad password.
+  - Use bcrypt with cost factor ≥ 12 (currently 12 — acceptable).
+  - Add HSTS header (`Strict-Transport-Security`) once deployed on HTTPS.
+- **Implementation**: Login rate limiting lives in `src/lib/auth.ts` (in-memory map).
+- **Memory safety**: Any in-memory Map used for rate limiting or tracking MUST have passive cleanup. Without it, an attacker sending millions of unique keys (random emails, IPs) fills the Map unboundedly until OOM crash. Use the `lastCleanup` timestamp pattern — purge expired entries every 5 minutes on access.
+- **Attack Vector**: Credential stuffing — attacker tries leaked email/password combos at scale. Memory exhaustion — attacker sends unique emails to grow the Map infinitely.
+
+---
+
+### 🏗️ 13. Security Headers
+- **Rule**: All responses MUST include hardening headers. Configured in `next.config.ts`.
+- **Required Headers**:
+  - `X-Frame-Options: DENY` — prevents clickjacking via iframes
+  - `X-Content-Type-Options: nosniff` — prevents MIME type sniffing
+  - `Referrer-Policy: strict-origin-when-cross-origin` — limits referrer leakage
+  - `Permissions-Policy: camera=(), microphone=(), geolocation=()` — disable unused APIs
+- **API-specific**:
+  - `Cache-Control: no-store` on all authenticated API routes (prevent proxy caching of sensitive data)
+- **Production-only**:
+  - `Strict-Transport-Security: max-age=63072000; includeSubDomains; preload` (add once HTTPS is enforced)
+
+---
+
+### 🛤️ 14. Proxy Route Coverage (Next.js 16+)
+- **Rule**: Every authenticated route group MUST be listed in `src/proxy.ts` matcher. In Next.js 16+, `proxy.ts` is the canonical route protection file — `middleware.ts` is deprecated and will log a warning.
+- **Best Practices**:
+  - When adding a new `(authenticated)` sub-route, add it to the proxy matcher immediately.
+  - The proxy layer is the FIRST line of defense — server actions and `getServerSession` checks are the SECOND.
+  - Test by hitting the URL directly without a session — should redirect to `/login`.
+  - Current protected routes: `/dashboard`, `/admin`, `/settings`, `/leaderboard`, `/profile`, `/notifications`, `/activity`, `/onboarding`, `/invite`
+- **Never**: Rely solely on the page-level `getServerSession` check — the proxy layer prevents the page from even rendering.
+- **Critical failure modes — Next.js silently skips the file if either of these is wrong**:
+  - **Wrong filename**: Must be `src/proxy.ts` (Next.js 16+). Using `middleware.ts` still works but logs a deprecation warning. Using any other name is ignored entirely — no error, routes unprotected.
+  - **Named export instead of default export**: The function MUST use `export default`. A named export is silently ignored by the Next.js runtime.
+  - **Both files present**: If both `src/proxy.ts` AND `src/middleware.ts` exist, Next.js 16 throws a hard error at startup. Only one must exist.
+  - Symptoms of a broken proxy: unauthenticated users can reach `/admin` or `/dashboard` directly; no redirect occurs; no runtime error is thrown.
+  ```typescript
+  // CORRECT (Next.js 16+) — src/proxy.ts
+  export default async function proxy(request: NextRequest) { ... }
+  export const config = { matcher: [...] };
+
+  // BROKEN — wrong filename OR named export OR both files present
+  export async function proxy(request: NextRequest) { ... } // named export, ignored
+  ```
+
+---
+
+### 💎 15. Credits-Only Language
+- **Rule**: PaperBets uses virtual credits — NEVER use language or symbols that imply real currency.
+- **Forbidden**:
+  - Currency symbols: `$`, `€`, `£`, `¢` (the cent sign implies real money)
+  - Words: "dollar", "USD", "pay", "purchase", "price" (when referring to share cost — use "cost in credits")
+  - Any phrasing that suggests monetary value or withdrawal capability
+- **Required terminology**:
+  - Share pricing: use `cr` suffix (e.g., "Yes 65cr", "bought at 40cr")
+  - Balances: always "credits" or "credit balance"
+  - Trading: "cost X credits", "earned X credits", "payout of X credits"
+  - Payouts: "winning shares pay 100cr each"
+- **Allowed "money" references**: Only in explicit disclaimers ("no real money involved", "not a gambling service")
+- **Applies To**: all UI text, SEO metadata, API responses, comments, agent-generated content
+- **Priority**: High
+
+---
+
+## Pre-Delivery Security Checklist
+
+Before shipping any new endpoint or server action:
+
+- [ ] Session checked at the top (or documented why it's public)
+- [ ] Input validated with Zod schema
+- [ ] Rate limiting applied (if public endpoint)
+- [ ] User input escaped before regex/queries
+- [ ] No IDOR — user can only access their own data (or resource is intentionally public)
+- [ ] File uploads validate magic bytes, not just MIME type
+- [ ] Secret comparisons use `crypto.timingSafeEqual`
+- [ ] Credit operations use transactions + ledger entries
+- [ ] Response only includes necessary fields (`.select()`)
+- [ ] Error messages don't leak internal details
+- [ ] New authenticated routes added to `src/proxy.ts` matcher
+- [ ] `src/proxy.ts` exists (Next.js 16+ convention) with `export default` — no `src/middleware.ts` present
+- [ ] Login/auth changes maintain brute-force protection
+- [ ] Security headers verified with `curl -sI` after deploy
+
+---
+
+## Production Deployment Checklist
+
+These items are NOT needed in local dev but MUST be addressed before going live:
+
+### 🌐 HTTPS & Transport
+- [ ] Enable HTTPS on all environments (Vercel/Railway/etc handle this automatically)
+- [ ] Add `Strict-Transport-Security: max-age=63072000; includeSubDomains; preload` header once HTTPS is confirmed
+- [ ] Redirect all HTTP traffic to HTTPS (301)
+- [ ] Set `NEXTAUTH_URL` to the production `https://` domain
+- [ ] Set `secure: true` on session cookies (NextAuth does this automatically when URL is https)
+
+### 🔑 Secrets & Environment
+- [ ] Generate fresh production secrets — NEVER reuse dev secrets:
+  - `NEXTAUTH_SECRET` — minimum 32 random characters (`openssl rand -base64 32`)
+  - `CRON_SECRET` — separate from dev
+  - `AWS_SECRET_ACCESS_KEY` — production IAM user with minimal permissions
+- [ ] Rotate all secrets that were ever committed or shared in dev
+- [ ] Verify `.env` is in `.gitignore` and NOT in the deployed image
+- [ ] Set secrets via the platform's secret management (not env files in production)
+
+### 🛡️ WAF & DDoS Protection
+- [ ] Enable Cloudflare, AWS WAF, or Vercel's built-in protection
+- [ ] Set up bot detection / challenge pages for suspicious traffic
+- [ ] Configure geographic restrictions if the platform targets specific regions
+- [ ] Enable automatic SSL certificate renewal
+
+### 📊 Monitoring & Alerting
+- [ ] Set up error tracking (Sentry, Bugsnag, or Vercel's built-in)
+- [ ] Monitor for 5xx spikes, latency anomalies, and auth failure rates
+- [ ] Alert on: >10 failed logins per minute (credential stuffing), >50 4xx per minute (scanning)
+- [ ] Log all admin actions (market resolution, user modifications) to an immutable audit log
+- [ ] Set up uptime monitoring with a health check endpoint
+
+### 🗄️ Database Security
+- [ ] MongoDB Atlas: enable IP allowlisting (only your app servers)
+- [ ] Use a dedicated database user with minimal permissions (no `dbAdmin` role)
+- [ ] Enable MongoDB audit logging for production
+- [ ] Enable encryption at rest and in transit (Atlas does this by default)
+- [ ] Set up automated backups with point-in-time recovery
+- [ ] Test restore procedure at least once before launch
+
+### 🔒 Content Security Policy (Production)
+- [ ] Add a strict CSP header once all third-party scripts are identified:
+  ```
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: *.s3.amazonaws.com; connect-src 'self' *.googleapis.com; font-src 'self' fonts.gstatic.com;
+  ```
+- [ ] Test CSP in report-only mode first (`Content-Security-Policy-Report-Only`)
+- [ ] Set up CSP violation reporting endpoint to catch issues
+
+### 🔄 Rate Limiting (Production-Grade)
+- [ ] Replace in-memory rate limiter with Redis-backed solution (Upstash, Redis Cloud)
+- [ ] In-memory maps reset on deploy/restart — Redis persists across instances
+- [ ] Add rate limiting per API key if you ever expose a public API
+- [ ] Consider separate rate limit tiers: anonymous (stricter) vs authenticated (relaxed)
+
+### 📧 Account Security
+- [ ] Add email verification on registration (send confirmation link before activating account)
+- [ ] Implement password reset flow with time-limited tokens
+- [ ] Add optional 2FA (TOTP) for admin accounts at minimum
+- [ ] Send email notification when password is changed or new device logs in
+- [ ] Implement session invalidation ("sign out all devices")
+
+### 🔍 Penetration Testing
+- [ ] Run OWASP ZAP or Burp Suite scan before launch
+- [ ] Test all auth flows manually: registration, login, password reset, session expiry
+- [ ] Test IDOR: change IDs in URLs while logged in as different users
+- [ ] Test file upload with malformed files, oversized files, path traversal filenames
+- [ ] Verify rate limits actually fire (send burst traffic with `ab` or `wrk`)
+
+### 📋 Compliance & Legal
+- [ ] Add privacy policy page (what data is collected, how it's stored, how to delete)
+- [ ] Add terms of service (virtual credits have no monetary value, no gambling disclaimer)
+- [ ] Implement data export (GDPR: user can download their data)
+- [ ] Implement account deletion (GDPR: right to be forgotten)
+- [ ] Cookie consent banner if serving EU users (analytics cookies, auth cookies are exempt)

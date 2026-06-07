@@ -1,0 +1,137 @@
+---
+description: Accessibility requirements for all interactive components and pages
+globs: "*.tsx"
+alwaysApply: true
+emoji: ♿
+title: Accessibility Standards
+---
+# Cursor Rule: Accessibility Standards
+
+## Description
+Enforce WCAG 2.1 AA compliance across all UI components. These rules prevent accessibility regressions and ensure the platform is usable by keyboard, screen reader, and assistive technology users.
+
+## Rules
+
+---
+
+### 🎯 1. Modals & Dialogs
+- **Rule**: Every modal/dialog MUST have:
+  - `role="dialog"` and `aria-modal="true"` on the dialog container
+  - `aria-labelledby` pointing to the dialog title, or `aria-label` if no visible title
+  - `aria-hidden="true"` on the backdrop overlay
+  - Focus trap: Tab cycles within the modal (last → first, Shift+Tab first → last)
+  - Escape key handler to close
+  - Focus moved to first focusable element (or close button) on open
+  - Focus restored to trigger element on close
+
+---
+
+### 🔘 2. Interactive Elements
+- **Rule**: All clickable elements MUST have:
+  - `cursor-pointer` class
+  - Visible focus state (`:focus-visible` ring — handled by shadcn base, but verify on custom elements)
+  - `aria-label` if the element has no visible text (icon-only buttons)
+  - `aria-expanded` on toggles that control visibility of another element
+  - `aria-haspopup` when clicking opens a menu or dialog
+  - `aria-controls` linking to the ID of the element being controlled
+
+---
+
+### 🖼️ 3. Decorative vs Meaningful Icons
+- **Rule**: Icons MUST have:
+  - `aria-hidden="true"` when they are decorative (next to text that already describes them)
+  - A descriptive `aria-label` on the parent button when the icon IS the label
+  - Never rely on icon alone to convey meaning — always pair with text or aria-label
+
+---
+
+### 📋 4. Menus & Dropdowns
+- **Rule**: Dropdown menus MUST have:
+  - `role="menu"` on the container
+  - `role="menuitem"` on each option
+  - Escape key to close
+  - Trigger button with `aria-expanded` and `aria-haspopup="menu"`
+
+---
+
+### ⌨️ 5. Keyboard Navigation
+- **Rule**:
+  - All functionality must be reachable via keyboard (Tab, Enter, Space, Escape, Arrow keys as appropriate)
+  - Skip-to-content link at the top of the page (`<a href="#main-content">`) — already implemented in layout.tsx
+  - Tab order must follow visual reading order (no positive `tabindex` values)
+  - No keyboard traps — user must always be able to Tab away (unless in a modal with focus trap)
+
+---
+
+### 🏷️ 6. Forms & Inputs
+- **Rule**: Form inputs MUST have:
+  - An associated `<label>` with `htmlFor` attribute, OR `aria-label` on the input
+  - Error messages linked via `aria-describedby` or adjacent text
+  - Required fields indicated with `required` attribute (not just visual asterisk)
+  - Visible focus ring on focus
+
+---
+
+### 🎨 7. Color & Contrast
+- **Rule**:
+  - Text must meet 4.5:1 contrast ratio against its background (WCAG AA)
+  - Large text (18px+ bold or 24px+): 3:1 minimum
+  - Color must NEVER be the only way to convey information (always pair with text, icon, or pattern)
+  - Interactive states (hover, active, focus) must be visible in both light and dark mode
+
+---
+
+### 🎬 8. Motion & Animation
+- **Rule**:
+  - `prefers-reduced-motion: reduce` MUST be respected globally (already in globals.css)
+  - No animation should be required to understand content
+  - Infinite/continuous animations only for loading states, never decorative
+
+---
+
+### 📱 9. Touch Targets
+- **Rule**:
+  - Minimum touch target: 44x44px (mobile) / 24x24px (desktop)
+  - Adequate spacing between targets (minimum 8px gap)
+  - Use padding to expand hit area, not just visual size
+
+---
+
+### ⏸️ 10. Streaming Data Pause Control (WCAG 2.2.2)
+- **Rule**: Any component that auto-updates visible content on an interval (live charts, tickers, stat counters, feeds) MUST provide an explicit pause/resume control per WCAG 2.2.2 (Pause, Stop, Hide).
+- **Best Practices**:
+  - The control MUST have `aria-pressed` reflecting current state (`true` = paused, `false` = live).
+  - The control MUST have an `aria-label` that describes the current state and what clicking will do: `"Pause chart updates"` / `"Resume chart updates"`.
+  - A global page-level Live/Paused toggle (e.g. the dashboard header toggle) does NOT satisfy this requirement — each independently streaming element needs its own control.
+  - When paused, the element must stop fetching/updating but retain the last known data (do not clear the display).
+  - Visual distinction between paused and live state is required (color, icon, or label change — not color alone).
+- **Example**:
+  ```tsx
+  <button
+    onClick={() => setChartPaused(p => !p)}
+    aria-pressed={chartPaused}
+    aria-label={chartPaused ? 'Resume chart updates' : 'Pause chart updates'}
+    className={`... ${chartPaused ? 'border-amber-500/30 bg-amber-500/10 text-amber-500' : '...'}`}
+  >
+    <Pause className="h-2.5 w-2.5" aria-hidden="true" />
+    {chartPaused ? 'Paused' : 'Pause'}
+  </button>
+  ```
+- **Applies To**: live charts, real-time feeds, auto-updating dashboards
+- **Priority**: High
+
+---
+
+## Pre-Delivery Checklist
+
+Before shipping any component with interactive elements:
+
+- [ ] Keyboard: can reach and operate all controls via Tab/Enter/Escape
+- [ ] Screen reader: announces purpose of all interactive elements
+- [ ] Focus visible: clear focus ring on all focusable elements
+- [ ] Modals: focus trapped, Escape closes, aria attributes present
+- [ ] Icons: `aria-hidden` on decorative, `aria-label` on functional
+- [ ] Forms: all inputs labeled
+- [ ] Motion: respects `prefers-reduced-motion`
+- [ ] Contrast: text meets 4.5:1 ratio
+- [ ] Streaming elements: each has its own pause/resume control with `aria-pressed` + `aria-label`

@@ -1,0 +1,209 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+---
+description: Rules for ShadCN UI components and styling
+globs: "*/components/*"
+alwaysApply: true
+emoji: 🎭
+title: ShadCN UI Best Practices
+---
+
+# ShadCN UI Usage Rules and Best Practices
+
+## Core Principles
+
+1. **Component-First Approach**: ShadCN UI components should be the foundation of all UI development.
+2. **Consistency Over Customization**: Prefer consistent design over unnecessary customization.
+3. **Extend, Don't Rebuild**: Enhance ShadCN components rather than creating alternatives.
+4. **Theme-Driven Development**: Use theme tokens for all styling decisions.
+
+## Installation & Setup
+
+1. **Component Installation**
+   - Always use the official CLI: `npx shadcn@latest add [component-name]`
+   - Never manually copy/paste component code from the ShadCN website
+   - Keep track of installed components in project documentation
+
+2. **Dependencies Management**
+   - Let the CLI handle dependency installation
+   - If manual installation is needed, verify versions match those used by ShadCN
+
+3. **CSS Variables**
+   - Maintain the ShadCN CSS variable structure in `globals.css`
+   - Don't modify the core variable names (e.g., `--primary`, `--background`)
+   - Extend with additional variables as needed, but follow the same naming pattern
+
+## Component Usage
+
+1. **Component Selection**
+   - ✅ ALWAYS check if a ShadCN component exists before building custom UI
+   - ✅ Choose the simplest component that fulfills the requirements
+   - ❌ NEVER reinvent components that already exist in ShadCN
+
+2. **Import Pattern**
+   - Use consistent import paths: `import { Button } from "@/components/ui/button"`
+   - Maintain component organization under `src/components/ui/`
+   - For custom extensions, use `src/components/custom/`
+
+3. **Composition Pattern**
+   - Follow ShadCN's composition patterns:
+     ```tsx
+     <Card>
+       <CardHeader>
+         <CardTitle>Title</CardTitle>
+         <CardDescription>Description</CardDescription>
+       </CardHeader>
+       <CardContent>Content here</CardContent>
+       <CardFooter>Footer actions</CardFooter>
+     </Card>
+     ```
+   - Don't skip intermediate components (e.g., always use `CardHeader` in a `Card`)
+
+4. **Props Usage**
+   - Use component props as documented (don't add arbitrary HTML attributes)
+   - Utilize variant props for styling variations
+   - Pass `className` for additional styling needs
+
+## Customization & Extension
+
+1. **Class Merging**
+   - Always use the `cn()` utility for merging classes
+   - Example: `className={cn("my-custom-class", props.className)}`
+
+2. **Extending Components**
+   - Create wrapper components that enhance functionality, not replace it
+   - Forward all appropriate props to the underlying ShadCN component
+   - Use React.forwardRef to maintain ref forwarding
+
+3. **Custom Variants**
+   - Add variants following the class-variance-authority pattern
+   - Document custom variants in component comments or Storybook
+   - Example:
+     ```tsx
+     const buttonVariants = cva(
+       "base-classes",
+       {
+         variants: {
+           // existing variants...
+           myCustomVariant: {
+             option1: "classes-for-option1",
+             option2: "classes-for-option2"
+           }
+         }
+       }
+     )
+     ```
+
+4. **Theme Compliance**
+   - Use CSS variables for all colors, spacing, and typography
+   - Support both light and dark themes with appropriate styling
+   - Test all customizations in both themes
+
+## Theming
+
+1. **Dark Mode Support**
+   - Use the `dark:` modifier for dark mode specific styling
+   - Test all components in both light and dark modes
+   - Ensure sufficient contrast in both themes
+
+2. **Color Usage**
+   - Use semantic color variables: `bg-primary` instead of specific colors
+   - Maintain accessibility standards for text contrast
+   - Use opacity modifiers (`/90`, `/80`) for state changes, not new colors
+
+3. **Spacing & Typography**
+   - Use Tailwind's size utilities consistently
+   - Follow the established type scale for font sizes
+   - Maintain consistent spacing patterns
+
+## Refactoring & Migration
+
+1. **Prioritization**
+   - Focus on high-visibility components first
+   - Prioritize components used across multiple pages
+   - Address accessibility issues during migration
+
+2. **Component Migration**
+   - Create a 1:1 mapping of old component to ShadCN component
+   - Test thoroughly in isolation before wider deployment
+   - Document props changes for team reference
+
+3. **Parallel Implementation**
+   - For complex components, consider implementing both versions temporarily
+   - Use feature flags to toggle between implementations
+   - Gather feedback before full replacement
+
+## Documentation
+
+1. **Storybook Integration**
+   - Create stories for all ShadCN components in use
+   - Document custom variants and extensions
+   - Provide usage examples for component compositions
+
+2. **Code Comments**
+   - Document non-obvious customizations
+   - Explain when and why ShadCN patterns are not followed
+   - Reference ShadCN documentation where helpful
+
+3. **Team Knowledge Sharing**
+   - Conduct training sessions on ShadCN usage
+   - Review UI PRs with ShadCN best practices in mind
+   - Maintain a shared component catalog
+
+## Performance & Accessibility
+
+1. **Bundle Size**
+   - Only install components you actually use
+   - Be mindful of dependencies introduced by components
+   - Consider code-splitting for rarely used complex components
+
+2. **Accessibility**
+   - Maintain all built-in accessibility features
+   - Test with screen readers and keyboard navigation
+   - Don't override focus styles without proper alternatives
+
+3. **Animation & Interaction**
+   - Use ShadCN's built-in transitions when available
+   - Keep animations subtle and purposeful
+   - Respect reduced motion preferences
+
+---
+
+## Component-Specific Guidelines
+
+### Buttons
+- Use the `Button` component for ALL clickable actions
+- Select appropriate variants based on hierarchy
+- Use `asChild` prop when wrapping links or other elements
+
+### Forms
+- Compose forms using Form + FormField + FormItem + FormControl pattern
+- Use appropriate validation with React Hook Form
+- Maintain label and error message patterns
+
+### Dialogs & Modals
+- Use Dialog component for all modal interactions
+- Maintain focus management and keyboard handling
+- Ensure proper stacking with z-index
+
+### Layout Components
+- Use Card for content containers
+- Tabs for section organization
+- Accordion for expandable content
+
+### Navigation
+- Command for keyboard navigation
+- NavigationMenu for main navigation
+- DropdownMenu for nested options
+
+### Data Display
+- Table for structured data
+- Avatar for user imagery
+- Badge for status indicators
+
+---
+
+By following these rules, we'll create a consistent, maintainable, and accessible UI that leverages the power of ShadCN UI while maintaining our project's unique requirements.

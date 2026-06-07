@@ -1,0 +1,90 @@
+---
+description: Rules for TypeScript development, type safety, and runtime validation
+globs: "*.ts,*.tsx"
+alwaysApply: true
+emoji: 🔷
+title: TypeScript Best Practices
+---
+# Cursor Rule: TypeScript Best Practices
+
+## Description
+Promote absolute type safety, compile-time correctness, and runtime predictability across your codebase with TypeScript and Zod. These rules cover type declarations, runtime validation boundaries, type narrowing, project configuration, and safe integration boundaries.
+
+## Rules
+
+---
+
+### 🧠 1. Type Safety First
+- **Rule**: Avoid `any` under all circumstances. Use `unknown` for dynamic or untyped payloads, and narrow them down using type guards or validation libraries.
+- **Best Practices**:
+  - Prefer `unknown` when working with external inputs, third-party libraries, or parsing JSON.
+  - Use `never` to enforce exhaustive checking in switch-case statements or unreachable code blocks.
+
+---
+
+### 🛡️ 2. Runtime Validation Boundaries (Zod Enforced)
+- **Rule**: Never trust external data at compile time. Validate all external boundaries (API requests, route query params, database payloads, and client forms) using **Zod**.
+- **Best Practices**:
+  - Derive TypeScript interfaces directly from Zod schemas using `z.infer<typeof schema>`.
+  - Validate payloads at key ingress points (Server Actions, Route Handlers, and custom hooks).
+- **Example**:
+  ```typescript
+  import { z } from 'zod';
+
+  export const UserProfileSchema = z.object({
+    id: z.string().uuid(),
+    displayName: z.string().min(2),
+    roles: z.array(z.enum(['admin', 'member'])),
+  });
+
+  export type UserProfile = z.infer<typeof UserProfileSchema>;
+  ```
+
+---
+
+### 🧾 3. Object Interface Standards
+- **Rule**: Use `interface` for structural object declarations and class contracts. Use `type` for unions, intersections, utility compositions, or functional interfaces.
+- **Best Practices**:
+  - Use `interface` for public, extendable API models or React props.
+  - Use `type` for creating combined states (e.g. `type State = 'idle' | 'loading' | 'success'`).
+
+---
+
+### 🔍 4. Implicit vs. Explicit Declarations
+- **Rule**: Let TypeScript infer types where the compiler has 100% clarity. Explicitly type all function return types, public API endpoints, and React component properties.
+- **Best Practices**:
+  - Do not over-annotate simple assignments (e.g. write `const isOpen = false;` rather than `const isOpen: boolean = false;`).
+  - Always write explicit return types for exported helper utilities and API route return values to prevent unexpected regressions.
+
+---
+
+### 💥 5. Avoid Cast Assertions
+- **Rule**: Avoid type assertions (`as Type`) and non-null assertions (`!`) unless interacting with legacy code or testing libraries.
+- **Best Practices**:
+  - Use runtime checks and type guards (`typeof`, `instanceof`, or custom type predicate functions) to narrow down types.
+  - Instead of `user!`, write an explicit null check or use safe optional chaining (`user?.name`).
+
+---
+
+### 🧱 6. Typed Props and Hooks in React
+- **Rule**: Explicitly type all React props and state variables.
+- **Best Practices**:
+  - Type components explicitly using standard parameter typing rather than legacy generic wrappers:
+    ```typescript
+    interface MyComponentProps {
+      title: string;
+    }
+
+    export function MyComponent({ title }: MyComponentProps) {
+      return <h1>{title}</h1>;
+    }
+    ```
+  - Use `useState<Type>()` if the state initial value is null or can shift.
+
+---
+
+### 📁 7. Modular Organization
+- **Rule**: Keep types modular and co-located near their implementation.
+- **Best Practices**:
+  - Co-locate types that are specific to a single component or page in the same folder.
+  - Move shared application-wide models to a dedicated `src/types/` directory using domain-specific files (e.g., `src/types/user.ts`).

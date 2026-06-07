@@ -1,0 +1,39 @@
+---
+description: Git Strategy and Version Control Conventions
+globs:
+alwaysApply: true
+---
+# Git Strategy: GitHub Flow & Conventional Commits
+
+## 1. Branching Model (GitHub Flow)
+- **`main` Branch**: The production-ready branch. Code here must always be deployable, stable, and have passed all linting and build checks.
+- **Feature Branches**: For every new feature, bug fix, or refactoring task, branch off from `main`.
+  - **Naming convention**: `feature/<short-description>`, `fix/<bug-description>`, `chore/<task-description>`.
+  - *Example*: `feature/add-nextauth`, `fix/mongoose-type-error`.
+
+## 2. Development Workflow
+1. **Sync**: Always ensure your local `main` is up to date (`git pull origin main`) before branching.
+2. **Branch**: Create a new branch for the specific task: `git checkout -b feature/scrape-dashboard`.
+3. **Develop**: Follow the strict development rules (Mobile First, Storybook, Shadcn).
+4. **Commit**: Make atomic, meaningful commits as progress is made.
+5. **Merge**: Once the feature is verified (both mobile and desktop) and linted successfully, merge to `main`.
+
+## 3. Commit Message Convention (Conventional Commits)
+Use Conventional Commits to maintain a clean and readable history.
+- `feat:` (New feature)
+  - *Example*: `feat: add NextAuth google provider integration`
+- `fix:` (Bug fix)
+  - *Example*: `fix: resolve typescript any type in Mongoose`
+- `ui:` (Styling/UI changes)
+  - *Example*: `ui: implement scraping dashboard layout with Shadcn`
+- `chore:` (Routine tasks, dependency updates)
+  - *Example*: `chore: update dependencies`
+- `docs:` (Documentation updates)
+  - *Example*: `docs: update README with API instructions`
+- `refactor:` (Refactoring code without changing behavior)
+  - *Example*: `refactor: extract scraping component logic`
+
+## 4. Enforcement Rules
+- ❌ NO committing directly to `main` for large features (use PRs or feature branches).
+- ❌ NO vague commit messages like "fixed bug" or "updates".
+- ❌ NO merging branches that fail `npm run build` or `npm run lint`.

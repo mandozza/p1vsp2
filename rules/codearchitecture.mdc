@@ -1,0 +1,171 @@
+---
+description: Rules for DRY code, single-responsibility functions, and reuse-first development
+globs: "*.ts,*.tsx"
+alwaysApply: true
+emoji: 🧱
+title: Code Architecture & DRY Principles
+---
+# Cursor Rule: Code Architecture & DRY Principles
+
+## Description
+Ensure code stays DRY (Don't Repeat Yourself), functions remain small and single-purpose, and existing utilities are reused before creating new ones. These rules prevent codebase bloat, reduce bugs from duplicated logic, and keep the project maintainable at scale.
+
+## Rules
+
+---
+
+### 🔍 1. Reuse Before You Create
+- **Rule**: Before writing any new function, component, utility, or type — search the codebase for an existing implementation that solves the same problem.
+- **Best Practices**:
+  - Check `src/lib/` for utility functions.
+  - Check `src/components/ui/` for shared UI primitives.
+  - Check `src/types/` for shared type definitions.
+  - If an existing function does 80% of what you need, extend it rather than creating a duplicate.
+- **Enforcement**: Never create a new utility that duplicates logic already present in the codebase. If you find duplication during implementation, refactor immediately.
+
+---
+
+### ✂️ 2. Single Responsibility Functions
+- **Rule**: Every function must do exactly one thing. If you can't describe what it does without using "and", split it.
+- **Best Practices**:
+  - Functions should be ≤ 20 lines of logic (excluding type declarations and early returns).
+  - Name functions as verbs that describe their single action: `calculateCost`, `validateTrade`, `formatPrice`.
+  - If a function has more than 2 levels of nesting, extract the inner logic into a named helper.
+  - Prefer pure functions (no side effects) wherever possible — isolate side effects into their own functions.
+- **Examples**:
+  - BAD: `processTradeAndUpdateBalance()` — does two things.
+  - GOOD: `executeTrade()` calls `deductCredits()` and `updatePosition()` separately.
+
+---
+
+### 🧩 3. Extract on Second Use
+- **Rule**: The first time you write a pattern is fine. The second time you write the same pattern, extract it into a shared function or component immediately.
+- **Best Practices**:
+  - Shared logic → `src/lib/` (named by domain: `market-engine.ts`, `credit-engine.ts`).
+  - Shared UI → `src/components/ui/` (e.g., `ErrorState`, `StatCard`, `LoadingGrid`).
+  - Shared types → `src/types/` (e.g., `actions.ts`, `market.ts`).
+  - Shared validation schemas → co-locate with models or create `src/lib/validators/`.
+- **Enforcement**: During code review, if a pattern appears in two or more files, it must be extracted before merge.
+
+---
+
+### 📦 4. Small Composable Modules
+- **Rule**: Organize code into small, focused modules that compose together. No god-files.
+- **Best Practices**:
+  - One model per file (already enforced by mongoose.mdc).
+  - One server action domain per file (e.g., `trade.actions.ts`, `credit.actions.ts`).
+  - Utility files should contain related functions grouped by domain, not random helpers.
+  - If a file exceeds ~150 lines, evaluate whether it should be split by sub-concern.
+- **Examples**:
+  - `src/lib/market-engine.ts` — LMSR math (pure functions only).
+  - `src/lib/credit-engine.ts` — credit calculations and eligibility checks.
+  - `src/actions/trade.actions.ts` — trade execution orchestration (calls engine + DB).
+
+---
+
+### 🚫 5. No Inline Magic Values
+- **Rule**: Never hardcode numbers, strings, or configuration values inline. All constants belong in `src/lib/constants.ts` or environment variables.
+- **Best Practices**:
+  - Credit amounts, rate limits, thresholds → `src/lib/constants.ts`.
+  - API keys, URLs, secrets → `.env` files.
+  - UI breakpoints, animation durations → Tailwind config or CSS variables.
+- **Enforcement**: Any literal number (other than 0, 1, -1) or repeated string in business logic must be a named constant.
+
+---
+
+### 🔁 6. Avoid Structural Duplication
+- **Rule**: Repeated structural patterns (loading skeletons, error boundaries, card layouts, form fields) must be abstracted into reusable components with props for variation.
+- **Best Practices**:
+  - Loading states: Create skeleton components (e.g., `LoadingGrid`, `LoadingStat`) rather than repeating `animate-pulse` divs.
+  - Error states: Use `ErrorState` component with `title`/`message`/`reset` props.
+  - Card layouts: Use composable card components rather than repeating border/padding patterns.
+  - Forms: Create form field wrapper components if the label + input + error pattern repeats.
+- **Examples**:
+  - BAD: Copy-pasting the same 15-line error UI into every `error.tsx`.
+  - GOOD: `<ErrorState title="..." message="..." reset={reset} />`
+
+---
+
+### 🏗️ 7. Layered Architecture
+- **Rule**: Maintain clear separation between layers. Each layer has one job:
+  - **Models** (`src/models/`) — schema, types, validation. No business logic.
+  - **Engines** (`src/lib/`) — pure business logic and calculations. No DB calls.
+  - **Actions** (`src/actions/`) — orchestration. Calls engines + models + DB. Handles auth checks.
+  - **Components** (`src/components/`) — presentation only. No direct DB or business logic.
+  - **Pages** (`src/app/`) — data fetching and layout composition. Minimal logic.
+- **Enforcement**: A component must never import from `src/models/` directly. A model must never import from `src/actions/`. Engines must be pure (testable without mocking DB).
+
+---
+
+### 🧪 8. Design for Testability
+- **Rule**: Write functions that are easy to test in isolation — pure inputs, predictable outputs, no hidden dependencies.
+- **Best Practices**:
+  - Business logic in engine files should be pure functions (input → output, no side effects).
+  - Avoid functions that depend on global state or implicit context.
+  - Server actions are the integration boundary — they wire together pure engines with effectful DB calls.
+  - If a function is hard to test, it's doing too much.
+
+---
+
+### 💰 9. Trade Logic Lives in `trade-service.ts`
+- **Rule**: ALL buy/sell share operations MUST go through `src/lib/trade-service.ts`. Never write Market/Position/Trade/CreditLedger update queries directly in action files, components, agent scripts, or cron handlers.
+- **Why**: Trade logic involves 5+ coordinated document writes (Market state, User balance, Position, Trade record, CreditLedger). Duplicating this across callers caused every bug we fixed: incorrect P&L, missing `totalEarnings`, hardcoded ledger balances, missing transactions.
+- **How to use**:
+  - `executeBuy({ userId, marketId, outcome, shares, balance, session? })` — full buy flow
+  - `executeSell({ userId, marketId, outcome, shares, session? })` — full sell flow
+  - Pass an external `session` when the caller owns the transaction (e.g., `trade.actions.ts`). Omit it and the service creates its own.
+- **Callers**:
+  - `trade.actions.ts` — user trades (adds auth, rate limiting, validation, external transaction)
+  - `agent.actions.ts` — agent trades (thin wrapper, no external transaction needed)
+  - Any future trade path (API endpoints, batch operations, migrations)
+- **Never**: Write `Market.findByIdAndUpdate` + `User.findByIdAndUpdate` + `Position` + `Trade.create` + `CreditLedger.create` inline anywhere. That's trade-service's job.
+
+---
+
+### 🔒 10. Multi-Document Writes Require Transactions
+- **Rule**: Any new service or action that modifies MORE THAN ONE document in a single operation MUST use a MongoDB transaction (or the service layer's built-in transaction handling).
+- **Critical paths that are already transactional** (do not regress):
+  - Trade execution (`trade-service.ts`) — Market + User + Position + Trade + CreditLedger
+  - Daily refill (`credit.actions.ts`) — atomic `findOneAndUpdate` + CreditLedger in transaction
+  - Market resolution (`market.actions.ts`) — all payouts in a single transaction
+- **When adding new features**: If your feature writes to 2+ collections, wrap in a transaction. If the MongoDB deployment doesn't support transactions (standalone dev), the trade-service gracefully falls back — but the code must still be structured for transactional correctness.
+- **Anti-pattern**: Sequential `await Model.update()` calls without a session. If the second one fails, the first already committed — corrupted state.
+
+---
+
+### 🤖 11. AI/LLM Integration Patterns
+- **Rule**: All AI model calls MUST use native structured output when available. Never rely on prompt instructions alone for output format.
+- **Best Practices**:
+  - Use `responseMimeType: 'application/json'` with Gemini SDK — guarantees valid JSON output.
+  - Never regex-clean markdown fences from LLM output — use structured output instead.
+  - Wrap all `generateJson` calls in try/catch — even structured output can fail on overloaded APIs.
+  - AI-driven features (agent decisions, content generation) MUST be behind feature flags in AppSettings so they can be toggled off without code changes.
+  - Dead AI code that's intended for future use MUST be gated behind a settings flag (e.g., `llmDrivenMode`) and documented — not left as unreachable code.
+- **Anti-pattern**: `const cleaned = text.replace(/```json\n?|\n?```/g, '')` — fragile, breaks when LLM adds conversational text.
+- **Applies To**: `src/lib/gemini.ts`, agent engines, any AI integration
+- **Priority**: Medium
+
+---
+
+## Anti-Patterns to Avoid
+
+| Anti-Pattern | Fix |
+|-------------|-----|
+| Copy-pasting code between files | Extract into shared module on second use |
+| Functions longer than 20 lines | Split into focused sub-functions |
+| "Utils" file that grows forever | Split by domain (market-utils, credit-utils) |
+| Component that fetches data AND renders | Split into page (fetch) + component (render) |
+| Inline numbers (e.g., `if (balance < 5000)`) | Use named constant from `constants.ts` |
+| Same validation logic in action + component | Single Zod schema imported by both |
+| God function that does everything | Compose small functions that each do one thing |
+| Writing buy/sell DB queries in action files | Import from `trade-service.ts` |
+| Multi-doc writes without a transaction | Wrap in `mongoose.startSession()` |
+| Regex-cleaning LLM output | Use `responseMimeType: 'application/json'` |
+| Unreachable AI code without a flag | Gate behind AppSettings toggle |
+| Read-check-then-write for decrements | Atomic `findOneAndUpdate` with `$gte` in filter |
+| Calling sub-functions without passing `session` | Accept `externalSession?` param, propagate to all reads/writes |
+| `updatedUser?.creditBalance ?? 0` in ledger | Throw if null — never write fallback values to audit trail |
+| Counting agent activity toward user rewards | Filter `role: 'member'` in reward-triggering queries |
+| `Document.create()` + `Parent.$inc()` without transaction | Wrap both in same transaction to prevent counter desync |
+| Reading shared state before `startTransaction()` | Move reads inside transaction — prevents write-skew on concurrent updates |
+| `findById` + status check before transaction | Use atomic `findOneAndUpdate({ status: { $ne: X } })` inside transaction |

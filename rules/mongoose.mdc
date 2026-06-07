@@ -1,0 +1,97 @@
+---
+description: Rules for Mongoose schema and model design with TypeScript
+globs: "*/models/*,*/schemas/*,*.ts"
+alwaysApply: true
+emoji: 🐘
+title: Mongoose Best Practices
+---
+# Mongoose Best Practices for TypeScript
+
+## ✅ Naming Conventions
+- Use **PascalCase** for model names: `User`, `BlogPost`, not `user` or `blogpost`.
+- Use **camelCase** for field names in schemas: `firstName`, `createdAt`, not `First_name`.
+
+## ✅ Schema Definition & TypeScript Types
+- Always define a corresponding TypeScript interface for every model (e.g., `interface IUser { ... }`).
+- Group fields logically, and place `_id` and reference fields near the top for visibility.
+- Always define schemas with `timestamps: true` unless there is a strong architectural reason not to.
+- Avoid overly permissive schemas (e.g., avoid `type: Object` or `type: Schema.Types.Mixed` unless absolutely needed).
+
+## ✅ Model Creation (Next.js Hot-Reload Safe)
+- Create models **once per connection** using `mongoose.models.ModelName || mongoose.model(...)` pattern to avoid `OverwriteModelError` in hot-reload environments (like Next.js development server).
+- **Example**:
+  ```typescript
+  import mongoose, { Schema, Document, Model } from 'mongoose';
+
+  export interface IUser {
+    email: string;
+    name: string;
+    createdAt: Date;
+    updatedAt: Date;
+  }
+
+  export interface IUserDocument extends IUser, Document {}
+
+  const UserSchema = new Schema<IUserDocument>({
+    email: { type: String, required: true, unique: true },
+    name: { type: String, required: true },
+  }, { timestamps: true });
+
+  export const User: Model<IUserDocument> = mongoose.models.User || mongoose.model<IUserDocument>('User', UserSchema);
+  ```
+
+## ✅ Mongoose `.lean()` Query Typing
+- **Rule**: Always use `.lean()` for read-only queries to dramatically improve performance.
+- **Best Practices**:
+  - Since `.lean()` converts the document into a plain JS object, it strips away Mongoose document properties (like `.save()`, getters, and virtuals) and returns `_id` as an `ObjectId` (or string, if configured).
+  - Explicitly type your lean query results using your base interface (e.g., `IUser`) rather than the Mongoose `Document` interface.
+  - **Never** pass a type that extends `Document` or `HydratedDocument` to `.lean<T>()` — this gives compile-time false positives, letting code call `.save()` or access virtuals on a plain object (runtime crash).
+  - Convert `ObjectId` to string in your data transfer objects (DTO) or API layers, as Next.js Server Components require serialized props.
+  - **Example**:
+    ```typescript
+    // CORRECT — pure interface
+    const user = await User.findOne({ email }).lean<IUser>();
+
+    // WRONG — Document type on a lean query
+    const user = await User.findOne({ email }).lean<IUserDocument>(); // ❌
+    ```
+
+## ✅ Relationships
+- Prefer using ObjectId references (`ref`) for relations between models.
+- Use `populate()` only when necessary — excessive populates can hurt performance.
+- For embedded subdocuments, define them using sub-schemas for readability and reuse.
+
+## ✅ findOneAndUpdate / findOneAndReplace Options
+- **Never** use `{ new: true }` — it is deprecated in Mongoose 6+.
+- Use `{ returnDocument: 'after' }` to return the updated document.
+- **Example**:
+  ```typescript
+  // CORRECT
+  const user = await User.findByIdAndUpdate(id, update, { returnDocument: 'after' });
+
+  // WRONG — deprecated, triggers runtime warning
+  const user = await User.findByIdAndUpdate(id, update, { new: true }); // ❌
+  ```
+
+## ✅ Queries & Performance
+- Always index fields that are filtered, sorted, or joined on frequently.
+- Use compound indexes for multi-field queries.
+- Use projections to select only required fields: `.select('name email')`.
+
+## ✅ Schema & Runtime Validation (Zod Integration)
+- Enforce core validations at the Mongoose schema level (e.g., `required`, `enum`, `min`, `max`).
+- **Co-locate Zod Schemas**: For every Mongoose model, define a matching Zod schema to validate user inputs before they reach database operations (such as in Server Actions or Route Handlers). This creates an early boundary defense.
+- **Example**:
+  ```typescript
+  import { z } from 'zod';
+
+  export const UserInputSchema = z.object({
+    email: z.string().email(),
+    name: z.string().min(2),
+  });
+  ```
+
+## ✅ Error Handling
+- Always wrap Mongoose operations in standard `try/catch` blocks or handle Promise rejections.
+- Gracefully handle common database errors, such as duplicate keys (error code `11000`) and cast errors.
+- Never bubble raw database error logs directly to the user interface. Provide standardized user-friendly messages instead.

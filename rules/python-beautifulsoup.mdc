@@ -1,0 +1,98 @@
+---
+description: Rules for Python and Web Scraping with BeautifulSoup
+globs: "*.py"
+alwaysApply: true
+---
+# Cursor Rule: Python and BeautifulSoup Best Practices
+
+## Description
+Promote robust, ethical, and maintainable web scraping scripts using Python and BeautifulSoup. These rules apply to request handling, HTML parsing, data extraction, and error management.
+
+## Rules
+
+---
+
+### 🐍 1. Pythonic Code and PEP 8
+- **Rule**: Follow standard Python conventions (PEP 8).
+- **Best Practices**:
+  - Use `snake_case` for variables and functions, `PascalCase` for classes.
+  - Keep functions focused on a single task (e.g., fetching, parsing, saving).
+  - Use list comprehensions and generators for efficient data processing.
+- **Applies To**: `style`, `readability`, `maintainability`
+- **Priority**: High
+
+---
+
+### 🌐 2. Ethical and Respectful Scraping
+- **Rule**: Always respect the target website's rate limits and terms of service.
+- **Best Practices**:
+  - Add explicit delays/sleeps (`time.sleep`) between requests to avoid overwhelming servers.
+  - Implement randomized delays to mimic human behavior.
+  - Set a descriptive `User-Agent to a random popular browser.
+- **Applies To**: `requests`, `ethics`, `rate-limiting`
+- **Priority**: Critical
+
+---
+
+### 🛡️ 3. Robust Request Handling
+- **Rule**: Handle HTTP requests safely to prevent scraper crashes.
+- **Best Practices**:
+  - Check response status codes (e.g., `response.raise_for_status()`) before parsing.
+  - Implement retries with exponential backoff for transient errors (e.g., 500, 502, 503, 504).
+  - Use timeouts to prevent hanging requests.
+- **Applies To**: `requests`, `error-handling`, `reliability`
+- **Priority**: High
+
+---
+
+### 🍲 4. Efficient HTML Parsing with BeautifulSoup
+- **Rule**: Use specific and robust CSS selectors or structural navigation instead of deeply nested DOM paths.
+- **Best Practices**:
+  - Prefer `soup.select()` and `soup.select_one()` with CSS selectors for clarity.
+  - Avoid brittle selectors that break with minor layout changes (e.g., `div > div > ul > li:nth-child(2)`).
+  - Use semantic tags, IDs, and robust data attributes (e.g., `data-testid`, `itemprop`) when available.
+- **Applies To**: `parsing`, `BeautifulSoup`, `DOM`
+- **Priority**: High
+
+---
+
+### 🧼 5. Safe Data Extraction
+- **Rule**: Anticipate missing data and handle it without throwing exceptions.
+- **Best Practices**:
+  - Use `.get_text(strip=True)` instead of `.text` to clean up whitespace.
+  - Always check if an element exists before extracting properties (e.g., `element.get('href')` instead of `element['href']`).
+  - Provide fallback values or default to `None` for missing fields.
+- **Applies To**: `extraction`, `data-cleaning`, `safety`
+- **Priority**: Critical
+
+---
+
+### 💾 6. Structured Data Storage
+- **Rule**: Save scraped data in structured and accessible formats.
+- **Best Practices**:
+  - Use standard libraries like `csv` or `json` to serialize output.
+  - Define data structures (e.g., dataclasses or Pydantic models) to validate schemas before saving.
+  - Stream data to files if scraping large volumes to avoid memory exhaustion.
+- **Applies To**: `io`, `data-serialization`, `memory`
+- **Priority**: Medium
+
+---
+
+### 🪵 7. Comprehensive Logging
+- **Rule**: Use the `logging` module instead of `print` statements.
+- **Best Practices**:
+  - Log start and completion of major scraping tasks (`INFO` level).
+  - Log skipped items or missing fields (`WARNING` level).
+  - Log request failures or parsing errors with tracebacks (`ERROR` level).
+- **Applies To**: `logging`, `debugging`, `monitoring`
+- **Priority**: High
+
+---
+
+### ✨ 8. Type Hinting
+- **Rule**: Use Python type hints to declare expected input and output types.
+- **Best Practices**:
+  - Annotate function parameters and return types (e.g., `def parse_html(html: str) -> list[dict]:`).
+  - Use tools like `mypy` or `pyright` to static check types.
+- **Applies To**: `typing`, `readability`, `maintainability`
+- **Priority**: Medium

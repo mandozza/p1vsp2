@@ -1,0 +1,140 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+---
+description: Rules for Storybook implementation and documentation
+globs: "*.stories.tsx,*.stories.ts"
+alwaysApply: true
+emoji: 📚
+title: Storybook Best Practices
+---
+
+# Cursor Rule: Storybook Best Practices
+
+## Description
+Ensure consistent, maintainable, and useful component documentation using Storybook. These rules cover story creation, documentation, testing, and integration with the existing tech stack.
+
+## Rules
+
+---
+
+### 📖 1. Story Organization
+- **Rule**: Every component must have corresponding stories that showcase its variants and states.
+- **Best Practices**:
+  - Use Component Story Format (CSF) 3.0
+  - Group stories by component category (atoms, molecules, organisms)
+  - Follow naming convention: `ComponentName.stories.tsx`
+- **Applies To**: `stories`, `organization`, `documentation`
+- **Priority**: High
+
+---
+
+### 🎨 2. Integration with ShadCN
+- **Rule**: Document all ShadCN component variants and customizations.
+- **Best Practices**:
+  - Show default ShadCN usage and custom implementations
+  - Document all variant combinations
+  - Include dark/light theme examples
+- **Applies To**: `ui`, `components`, `theming`
+- **Priority**: High
+
+---
+
+### 📱 3. Responsive Documentation
+- **Rule**: Document component behavior across all breakpoints.
+- **Best Practices**:
+  - Use viewport addon to showcase responsive designs
+  - Include mobile, tablet, and desktop views
+  - Document any responsive prop changes
+- **Applies To**: `responsive`, `layout`, `documentation`
+- **Priority**: High
+
+---
+
+### ♿ 4. Accessibility Documentation
+- **Rule**: Include accessibility information and testing states.
+- **Best Practices**:
+  - Use a11y addon to test and document accessibility
+  - Show keyboard navigation examples
+  - Document ARIA attributes and roles
+- **Applies To**: `a11y`, `testing`, `documentation`
+- **Priority**: Critical
+
+---
+
+### 🧪 5. Interactive Testing
+- **Rule**: Provide interactive examples for all component states.
+- **Best Practices**:
+  - Use controls addon for prop manipulation
+  - Include error states and loading states
+  - Document event handlers and callbacks
+- **Applies To**: `testing`, `interaction`, `documentation`
+- **Priority**: High
+
+---
+
+### 📝 6. Documentation Standards
+- **Rule**: Maintain consistent documentation across all stories.
+- **Best Practices**:
+  - Use MDX for complex documentation
+  - Include code examples and usage guidelines
+  - Document prop types and default values
+- **Applies To**: `documentation`, `consistency`, `guidelines`
+- **Priority**: Medium
+
+---
+
+### 🔄 7. State Management Examples
+- **Rule**: Document components that interact with global state.
+- **Best Practices**:
+  - Show examples with context providers
+  - Document Zustand/Jotai store integration
+  - Include loading and error states
+- **Applies To**: `state`, `integration`, `examples`
+- **Priority**: Medium
+
+---
+
+### 🎯 8. Performance Considerations
+- **Rule**: Document performance implications and optimizations.
+- **Best Practices**:
+  - Use performance addon when relevant
+  - Document memoization usage
+  - Show loading strategies for heavy components
+- **Applies To**: `performance`, `optimization`, `documentation`
+- **Priority**: Medium
+
+---
+
+### 🧩 9. Composition Examples
+- **Rule**: Document component composition patterns.
+- **Best Practices**:
+  - Show how components work together
+  - Document prop drilling solutions
+  - Include common use cases
+- **Applies To**: `patterns`, `composition`, `examples`
+- **Priority**: High
+
+---
+
+### 🔐 10. Form Component Documentation
+- **Rule**: Thoroughly document form components and validation.
+- **Best Practices**:
+  - Show integration with form libraries
+  - Document validation states
+  - Include error handling examples
+- **Applies To**: `forms`, `validation`, `documentation`
+- **Priority**: High
+
+---
+
+### 🎭 11. Theme Documentation
+- **Rule**: Document theme customization and variants.
+- **Best Practices**:
+  - Show theme switching
+  - Document custom variants
+  - Include color palette usage
+- **Applies To**: `theming`, `customization`, `documentation`
+- **Priority**: Medium

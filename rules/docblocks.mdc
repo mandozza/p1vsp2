@@ -1,0 +1,119 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+--
+description: Rules for code documentation and comments
+globs: "*.ts,*.tsx"
+alwaysApply: true
+emoji: 📝
+title: Docblock Best Practices
+---
+
+# Cursor Rule: Docblocks Best Practices
+
+## Description
+Use docblocks to improve code readability, maintainability, and developer experience. These rules apply to documentation for functions, components, types, and complex logic in JavaScript/TypeScript codebases.
+
+## Rules
+
+---
+
+### 📚 1. Use JSDoc or TSDoc Syntax
+- **Rule**: Use JSDoc/TSDoc syntax for all docblocks to enable IDE support and type inference.
+- **Best Practices**:
+  - Use `/** ... */` style docblocks, not `//` comments
+  - Use `@param`, `@returns`, and `@example` consistently
+- **Applies To**: `comments`, `functions`, `components`
+- **Priority**: High
+
+---
+
+### ✍️ 2. Document All Public Functions
+- **Rule**: Every exported function, method, or component must have a docblock.
+- **Best Practices**:
+  - Describe what the function/component does
+  - Document parameters and return types even if they are typed
+- **Applies To**: `utils`, `api`, `components`
+- **Priority**: High
+
+---
+
+### 🧱 3. Describe Component Props Clearly
+- **Rule**: Include a docblock above React component props definitions.
+- **Best Practices**:
+  - Document what each prop does, whether it’s required, and its expected values
+  - Use `@prop` or inline `@param` for `Props` interfaces
+- **Applies To**: `React`, `props`, `interfaces`
+- **Priority**: Medium
+
+---
+
+### 🧠 4. Explain Complex Logic
+- **Rule**: Use inline docblocks to explain non-obvious or complex algorithms.
+- **Best Practices**:
+  - Add high-level docblocks above tricky functions or calculations
+  - Include links to relevant docs or decisions if helpful
+- **Applies To**: `algorithms`, `backend`, `edge cases`
+- **Priority**: Medium
+
+---
+
+### 🔍 5. Keep Comments Updated
+- **Rule**: Always update docblocks when the logic or API changes.
+- **Best Practices**:
+  - Treat comments as part of the codebase
+  - Remove stale, inaccurate, or redundant documentation
+- **Applies To**: `maintenance`, `refactoring`, `docs`
+- **Priority**: High
+
+---
+
+### 🔄 6. Use @example to Show Usage
+- **Rule**: Provide usage examples for exported utilities and components.
+- **Best Practices**:
+  - Use `@example` with code snippets for clarity
+  - Keep examples simple, real-world, and consistent with current API
+- **Applies To**: `utils`, `components`, `API`
+- **Priority**: Medium
+
+---
+
+### 🧾 7. Be Concise but Descriptive
+- **Rule**: Docblocks should describe *why* and *what*, not just *how*.
+- **Best Practices**:
+  - Focus on purpose and intent
+  - Avoid repeating implementation details already clear from code
+- **Applies To**: `docs`, `comments`, `readability`
+- **Priority**: Medium
+
+---
+
+### 📐 8. Standardize Format Across Codebase
+- **Rule**: Follow a consistent format and ordering in all docblocks.
+- **Best Practices**:
+  - Order tags: `@description`, `@param`, `@returns`, `@example`, `@throws`
+  - Use consistent punctuation, spacing, and line breaks
+- **Applies To**: `style`, `collaboration`, `conventions`
+- **Priority**: Medium
+
+---
+
+### ✅ 9. Integrate with Tooling
+- **Rule**: Leverage docblocks in IDEs, linters, and documentation tools.
+- **Best Practices**:
+  - Enable IntelliSense/auto-complete support via JSDoc or TSDoc
+  - Use tools like `typedoc`, `eslint-plugin-jsdoc`, or `tsdoc` parser
+- **Applies To**: `devtools`, `DX`, `documentation`
+- **Priority**: Medium
+
+---
+
+### 🧪 10. Document Types and Enums
+- **Rule**: Add docblocks to complex types, enums, and union types.
+- **Best Practices**:
+  - Explain intent and meaning of each value
+  - Use `@enum`, `@typedef`, or `@type` where appropriate
+- **Applies To**: `types`, `interfaces`, `enums`
+- **Priority**: Medium

@@ -1,0 +1,216 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+---
+description: Rules for MongoDB and database operations
+globs: "*/models/*,*/db/*"
+alwaysApply: true
+emoji: 🗃️
+title: MongoDB Best Practices
+---
+
+
+# Cursor Rule: MongoDB Best Practices
+
+## Description
+Enforce best practices for MongoDB usage in all code and schema design. These rules apply to collections, queries, indexing, and database architecture.
+
+## Rules
+
+### 🧠 1. Schema Design
+- **Rule**: Design schemas around application usage patterns, not just relational models.
+- **Examples**:
+  - Embed data for read-heavy, low-write scenarios (e.g. comments in posts).
+  - Reference data for high-volume writes or when documents exceed 16MB.
+- **Applies To**: `schema`, `model`, `data modeling`
+- **Priority**: High
+
+---
+
+### 🔑 2. Indexing
+- **Rule**: Always index fields that are filtered, sorted, or joined on frequently.
+- **Best Practices**:
+  - Use compound indexes for multi-field queries.
+  - Include TTL indexes for expiring data (e.g., sessions, temp tokens).
+  - **ESR Rule for compound index field order**: Equality fields first → Sort fields second → Range fields last.
+    - Example: A query `{ status: 'open' }` sorted by `{ totalVolume: -1 }` with `closesAt: { $gte: date }` needs index `{ status: 1, totalVolume: -1, closesAt: 1 }` — NOT `{ closesAt: 1, status: 1 }`.
+    - Wrong order renders the index useless for the sort phase, falling back to in-memory sort.
+- **Applies To**: `queries`, `collections`, `performance`
+- **Priority**: High
+
+---
+
+### 🔐 3. Security
+- **Rule**: Do not expose MongoDB URIs or credentials in code or logs.
+- **Best Practices**:
+  - Use environment variables (`MONGODB_URI`)
+  - Limit access to whitelisted IPs or use VPC peering
+  - Use role-based access control (RBAC) with least privilege
+- **Applies To**: `env`, `backend`, `devops`
+- **Priority**: Critical
+
+---
+
+### 📏 4. Naming Conventions
+- **Rule**: Use lowercase, singular collection names (e.g., `user`, `track`)
+- **Consistency**:
+  - Field names should be camelCase
+  - Use `_id` as primary key field unless special reason exists
+- **Applies To**: `schemas`, `collections`, `documents`
+- **Priority**: Medium
+
+---
+
+### 📊 5. Query Optimization
+- **Rule**: Avoid unindexed `$regex`, `$ne`, and `$nin` queries on large datasets.
+- **Best Practices**:
+  - Use `.lean()` in Mongoose when you don't need full model instances.
+  - Limit projections to only required fields (`.select('name bio')`).
+  - **Never use `$regex` with `$options: 'i'` for search** — case-insensitive regex forces a full collection scan (COLLSCAN) regardless of indexes. Use MongoDB `$text` search with a text index instead.
+  - Text indexes: declare with `Schema.index({ title: 'text', description: 'text' })`. Query with `{ $text: { $search: q } }` and sort by `{ score: { $meta: 'textScore' } }`.
+  - Every field used in a `.find()` filter or `.sort()` must have a corresponding index. Check with `db.collection.explain('executionStats')` — if `stage: "COLLSCAN"` appears, add an index.
+  - **Never loop DB queries to find a unique value** (e.g., `while (await findOne({username})) suffix++`). Instead, batch-fetch all candidates in one query and compute the answer in-memory.
+- **Applies To**: `queries`, `performance`
+- **Priority**: High
+
+---
+
+### 🧪 6. Data Validation
+- **Rule**: Validate inputs both on the backend and in schema definitions
+- **Best Practices**:
+  - Use Mongoose validators or Zod/Yup in your API layer
+  - Ensure required fields are present in all write operations
+- **Applies To**: `schema`, `api`, `backend`
+- **Priority**: High
+
+---
+
+### 🛑 7. Migration Safety
+- **Rule**: Never drop or rename collections in production without a migration plan
+- **Best Practices**:
+  - Use migration libraries like `migrate-mongo` or custom scripts with backup
+- **Applies To**: `devops`, `schema evolution`
+- **Priority**: High
+
+---
+
+### 📈 8. Monitoring & Performance
+- **Rule**: Enable performance monitoring for queries over 100ms
+- **Best Practices**:
+  - Use MongoDB Atlas monitoring
+  - Review slow queries regularly with logs or profiler
+- **Applies To**: `backend`, `database`
+- **Priority**: Medium
+
+---
+
+### 🔄 9. Transactions for Multi-Document Writes
+- **Rule**: Any operation that modifies MORE THAN ONE document MUST use a MongoDB transaction.
+- **Best Practices**:
+  - Start a session with `mongoose.startSession()` + `startTransaction()`.
+  - Pass `{ session: txSession }` to EVERY query inside the transaction — reads AND writes. A read without the session is a "transaction leak" that can yield dirty/stale data.
+  - Use the array form for `.create()` inside transactions: `Model.create([{...}], { session })`.
+  - Always `commitTransaction()` on success, `abortTransaction()` on error, `endSession()` in `finally`.
+  - If a transaction is too large (e.g., paying out 500 positions), batch into chunks of 50-100 with one transaction per batch.
+- **Critical paths that MUST be transactional**:
+  - Trade execution (buy/sell): Market state + User balance + Position + Trade + CreditLedger.
+  - Market resolution payouts: All position payouts + User balances + CreditLedger entries.
+  - Daily credit refills: User balance + CreditLedger.
+  - Any operation touching `creditBalance` + `CreditLedger` together.
+- **Never**: Use separate `await Model.update()` calls for related financial documents without a transaction. A failure between them corrupts the audit trail.
+- **Denormalized counters** (e.g., `totalComments`, `followerCount`, `followingCount`) MUST be updated in the same transaction as the document creation that triggers them. A network failure between `Document.create()` and `Parent.$inc()` permanently desynchronizes the counter.
+- **Never**: Save a status change (e.g., `market.status = 'resolved'; await market.save()`) OUTSIDE the transaction that performs the downstream effects (payouts, refunds). If the server crashes between the save and the effects, the record is in an unrecoverable state. The status change and its side effects MUST be in the same transaction.
+- **Pattern**: When a function performs side effects that belong to a parent transaction, accept a `session: ClientSession` parameter instead of starting its own transaction. The parent owns the commit/abort lifecycle.
+- **Session propagation pattern** for functions that may be called standalone OR inside a parent transaction:
+  ```typescript
+  async function doWork(userId: string, externalSession?: mongoose.ClientSession) {
+    const ownsTransaction = !externalSession;
+    const txSession = externalSession || await mongoose.startSession();
+    try {
+      if (ownsTransaction) txSession.startTransaction();
+      // ... all reads and writes use { session: txSession } ...
+      if (ownsTransaction) await txSession.commitTransaction();
+    } catch (error) {
+      if (ownsTransaction) await txSession.abortTransaction();
+      throw error;
+    } finally {
+      if (ownsTransaction) txSession.endSession();
+    }
+  }
+  ```
+- **Reads inside transactions MUST use the session too**: `User.findById(id).session(txSession)`. A read without the session sees the database state BEFORE the transaction's uncommitted writes — this causes ledger drift where the CreditLedger `balance` field records a stale value.
+- **Write-skew prevention**: When a transaction reads shared state (e.g., market pricing), computes a result, then writes back — the read MUST happen inside the transaction with the session. If the read happens before the transaction starts, two concurrent transactions will read the same state, compute independently, and the second commit silently overwrites the first (write-skew anomaly). Pattern:
+  ```typescript
+  // WRONG — read before transaction, write-skew vulnerable
+  const market = await Market.findById(id).lean();
+  const cost = calculateCost(market);
+  txSession.startTransaction();
+  await Market.findByIdAndUpdate(id, { ...cost }, { session: txSession });
+
+  // CORRECT — read inside transaction, acquires lock
+  txSession.startTransaction();
+  const market = await Market.findById(id).session(txSession).lean();
+  const cost = calculateCost(market);
+  await Market.findByIdAndUpdate(id, { ...cost }, { session: txSession });
+  ```
+- **Idempotent resolution**: Operations that change status (e.g., resolving a market) MUST use `findOneAndUpdate` with the current status as a filter condition (`status: { $ne: 'resolved' }`). This prevents double-execution when concurrent requests bypass a pre-transaction status check.
+- **Applies To**: `actions`, `mutations`, `financial`
+- **Priority**: Critical
+
+---
+
+### 🏁 10. Atomic Check-and-Set for Concurrency
+- **Rule**: For idempotent operations (daily claims, one-time rewards) AND all financial decrements (spending credits, selling shares), use atomic `findOneAndUpdate` with eligibility conditions in the query filter — NOT read-then-check-then-write.
+- **Best Practices**:
+  - Bake the eligibility check INTO the query: `{ _id: userId, lastDailyRefill: { $lte: cutoff } }`.
+  - If `findOneAndUpdate` returns `null`, the condition wasn't met — reject without a race window.
+  - This pattern is immune to double-submit race conditions even without an explicit transaction (though combine with one if you also need a ledger entry).
+- **Critical: Credit decrements**:
+  ```typescript
+  // CORRECT — atomic balance guard
+  const user = await User.findOneAndUpdate(
+    { _id: userId, creditBalance: { $gte: cost } },
+    { $inc: { creditBalance: -cost } },
+    { returnDocument: 'after', ...sessionOpt }
+  );
+  if (!user) throw new Error('Insufficient credits');
+  ```
+- **Critical: Share decrements**:
+  ```typescript
+  // CORRECT — atomic share guard
+  const pos = await Position.findOneAndUpdate(
+    { _id: positionId, shares: { $gte: sharesToSell } },
+    { $inc: { shares: -sharesToSell } },
+    { returnDocument: 'after', ...sessionOpt }
+  );
+  if (!pos) throw new Error('Insufficient shares');
+  ```
+- **Anti-pattern**: `const user = await User.findById(id)` → `if (user.creditBalance >= cost)` → `await User.update({ $inc: { creditBalance: -cost } })`. Two concurrent requests both pass the check and both decrement — user goes negative.
+- **Anti-pattern**: Using `$inc` with a negative value WITHOUT a `$gte` guard in the filter. Mongoose `min: 0` schema validators do NOT run on `$inc` operations by default.
+- **Applies To**: `actions`, `concurrency`, `trade-service`, `financial`
+- **Priority**: Critical
+
+---
+
+### 📡 11. Change Streams & Replica Sets
+- **Rule**: MongoDB change streams (used for SSE live feeds) require the database to run as a replica set — even locally with a single node.
+- **Local dev setup**:
+  - Add `replication: replSetName: rs0` to `mongod.conf` and restart.
+  - Run `rs.initiate()` once via `mongosh`.
+  - Append `?replicaSet=rs0` to the `MONGODB_URI` connection string.
+- **Code pattern**: Use `collection.watch()` to subscribe to inserts/updates and emit via an in-process EventEmitter. Never poll the DB on a timer for live updates.
+- **Applies To**: `SSE`, `live-feeds`, `real-time`
+- **Priority**: High
+
+---
+
+### 📒 12. CreditLedger Accuracy
+- **Rule**: The `balance` field in every CreditLedger entry MUST reflect the user's ACTUAL balance AFTER the transaction, not a hardcoded value.
+- **Best Practices**:
+  - Use `findByIdAndUpdate(..., { $inc }, { returnDocument: 'after' })` and read the returned `creditBalance` — this gives the post-update value atomically.
+  - Alternatively, read the balance INSIDE the same transaction session after the `$inc` has been applied.
+  - Never write `balance: 0` as a placeholder. The ledger is the audit trail — incorrect balances make forensic debugging impossible.
+- **Applies To**: `CreditLedger`, `audit`, `financial`
+- **Priority**: Critical

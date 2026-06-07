@@ -1,0 +1,298 @@
+---
+description: Rules for application performance, rendering speed, and efficient data fetching
+globs: "*.ts,*.tsx"
+alwaysApply: true
+emoji: ⚡
+title: Performance Optimization
+---
+# Cursor Rule: Performance Optimization
+
+## Description
+Ensure the application loads fast, renders efficiently, and minimizes unnecessary work on both client and server. These rules cover data fetching, rendering, bundle size, database queries, and runtime efficiency.
+
+## Rules
+
+---
+
+### 🖥️ 1. Server-First Data Fetching
+- **Rule**: Fetch data in Server Components. Never fetch in client components unless it's for real-time updates (polling, SSE).
+- **Best Practices**:
+  - Use `async` Server Components for data loading — zero client-side waterfall.
+  - Pass fetched data as props to client components that need interactivity.
+  - Use `Promise.all()` for parallel independent queries in a single page.
+  - Never use `useEffect` for initial data loading — that's a client waterfall.
+- **Examples**:
+  - BAD: Client component calls API on mount → spinner → render.
+  - GOOD: Server Component fetches → streams HTML with data already present.
+
+---
+
+### 📦 2. Minimize Client Bundle
+- **Rule**: Keep the client JavaScript bundle as small as possible. Only ship code to the browser that requires browser APIs or interactivity.
+- **Best Practices**:
+  - Default to Server Components (no JS shipped to client).
+  - Use `"use client"` only on the smallest possible subtree — not entire pages.
+  - Use `next/dynamic` with `{ ssr: false }` for heavy client-only libraries (charts, editors).
+  - Never import server-only libraries (mongoose, bcrypt) in client components.
+  - Audit with `@next/bundle-analyzer` if bundle exceeds 200KB first-load JS.
+- **Examples**:
+  - BAD: `"use client"` on a page that only needs one interactive button.
+  - GOOD: Server Component page with one small `<TradeButton />` client island.
+
+---
+
+### 🗄️ 3. Database Query Efficiency
+- **Rule**: Every database query must be intentional and optimized. No over-fetching, no N+1 queries, no missing indexes.
+- **Best Practices**:
+  - Always use `.lean()` for read-only queries (skips Mongoose hydration overhead).
+  - Select only the fields you need with `.select('field1 field2')` on large documents.
+  - Use `.limit()` on all list queries — never fetch unbounded collections.
+  - Use compound indexes for queries that filter + sort on multiple fields.
+  - Avoid `.populate()` in loops — use a single aggregation or batch lookup instead.
+  - Denormalize counters for values read frequently (totalVolume, followerCount).
+  - For paginated lists, use cursor-based pagination (`_id > lastId`) over skip/offset.
+- **Enforcement**: Any query without `.lean()` on a read path must justify why it needs the full document.
+
+---
+
+### 🏎️ 4. Rendering Performance
+- **Rule**: Components must render efficiently without unnecessary re-renders or layout thrashing.
+- **Best Practices**:
+  - Memoize expensive computations with `useMemo` (only when profiling shows it helps).
+  - Use `React.memo` for pure display components receiving stable but complex props.
+  - Avoid creating new objects/arrays/functions in render — stabilize with `useCallback`/`useMemo` when passed as deps.
+  - Colocate state — lift state only as far as needed, not to the nearest provider.
+  - Use CSS for animations (Tailwind `transition`, `animate`) — never JS-driven frame loops for UI transitions.
+  - Virtualize long lists (>50 items) with a library like `@tanstack/virtual`.
+- **Examples**:
+  - BAD: Leaderboard renders 500 rows in the DOM at once.
+  - GOOD: Virtualized list renders only visible rows + buffer.
+
+---
+
+### 🖼️ 5. Asset and Image Optimization
+- **Rule**: All images must use `next/image` for automatic optimization, lazy loading, and responsive sizing.
+- **Best Practices**:
+  - Always provide `width` and `height` (or `fill` with a sized container) to prevent layout shift.
+  - Use `priority` only for above-the-fold hero images.
+  - Serve user-uploaded images from a CDN or object storage with URL transforms for sizing.
+  - Use SVG for icons and simple graphics (no raster images for UI chrome).
+  - Prefer `loading="lazy"` (default in next/image) for below-fold content.
+
+---
+
+### 🌐 6. Caching and Revalidation
+- **Rule**: Cache aggressively, revalidate intentionally. Stale data costs less than slow pages.
+- **Best Practices**:
+  - Use Next.js `unstable_cache` or fetch caching for expensive reads that change infrequently.
+  - Set `revalidate` on routes/layouts for ISR where fresh-on-every-request isn't needed.
+  - Use `revalidatePath()` or `revalidateTag()` in Server Actions after mutations.
+  - For real-time data (prices, positions), use short polling intervals (5s) — not uncached fetches.
+  - Static content (marketing pages, FAQ) should be fully static (no dynamic rendering).
+- **Examples**:
+  - Market listing page: revalidate every 30s (prices change but not critical to be instant).
+  - Dashboard: dynamic (user-specific data, no shared cache).
+  - Landing page: static build.
+
+---
+
+### 🧮 7. Efficient Algorithms and Data Structures
+- **Rule**: Choose the right data structure and avoid unnecessary iteration. O(n²) is never acceptable for user-facing paths.
+- **Best Practices**:
+  - Use `Map`/`Set` for lookups instead of repeated `.find()` on arrays.
+  - Avoid nested loops over the same dataset — restructure with a lookup map.
+  - For LMSR calculations, cache intermediate values (e^(q/b)) when computing multiple prices.
+  - Pre-compute and store derived values (currentPriceYes) rather than recalculating on every read.
+  - Batch database operations (bulkWrite, insertMany) for multi-document updates.
+
+---
+
+### 📡 8. Network Efficiency
+- **Rule**: Minimize HTTP roundtrips and payload sizes between client and server.
+- **Best Practices**:
+  - Use Server Actions for mutations — single roundtrip, automatic serialization.
+  - For polling endpoints, return only the fields the client needs (not full documents).
+  - Use HTTP streaming (React Suspense + Server Components) to show content progressively.
+  - Debounce user inputs (search, filters) before triggering fetches (300ms minimum).
+  - Avoid sending large payloads to the client that could be rendered server-side.
+- **Examples**:
+  - BAD: Polling endpoint returns full market document (30 fields) for a price ticker.
+  - GOOD: Polling endpoint returns `{ priceYes: 0.65, priceNo: 0.35, volume: 1200 }`.
+
+---
+
+## Performance Budgets
+
+| Metric | Target | Measurement |
+|--------|--------|-------------|
+| First Load JS | < 100KB per route | `next build` output |
+| Largest Contentful Paint | < 2.5s | Lighthouse |
+| Time to Interactive | < 3.5s | Lighthouse |
+| Database query per page | ≤ 3 queries | Server Component render |
+| API response (polling) | < 100ms | Route Handler |
+| Full page render (server) | < 500ms | Server timing headers |
+
+---
+
+### 🎬 9. Canvas & Animation Performance
+- **Rule**: Animated canvas elements and continuous animations must be resource-efficient.
+- **Best Practices**:
+  - Cap `requestAnimationFrame` loops to 30fps for slow-moving ambient animations (mesh gradients, particles).
+  - Pause animations when the tab is hidden (`document.visibilitychange`).
+  - Respect `prefers-reduced-motion` — disable all continuous animations entirely.
+  - Never run full-screen canvas at 60fps for decorative background effects.
+  - Use CSS animations (`transition`, `@keyframes`) over JS frame loops when possible.
+- **Examples**:
+  - BAD: Background gradient redraws 60 times/second on every page including data tables.
+  - GOOD: 30fps cap + pauses when tab hidden + no draw on reduced-motion preference.
+
+---
+
+### 🖼️ 10. Image Sizing & Loading
+- **Rule**: All `<Image>` with `fill` MUST include a `sizes` prop to prevent Next.js from generating unnecessary srcsets.
+- **Best Practices**:
+  - Set `sizes` to the actual rendered size: `"32px"` for avatars, `"64px"` for profile photos, etc.
+  - Use `loading="lazy"` (default) for below-fold images. Only use `priority` for the hero.
+  - For lists of images (leaderboard rows, feeds), explicitly set `loading="lazy"`.
+  - SVG avatars don't need `next/image` — serve them as static assets directly.
+
+---
+
+### ⏸️ 11. Suspense & Streaming
+- **Rule**: Client components using `useSearchParams()`, `usePathname()`, or other hooks that prevent static prerendering MUST be wrapped in `<Suspense>`.
+- **Best Practices**:
+  - Wrap in the parent layout or a dedicated `<Suspense>` boundary with a fallback.
+  - This enables the page shell to be statically generated while the dynamic part streams.
+  - Check `next build` output: `○` = static (good), `ƒ` = dynamic (verify it needs to be).
+  - Marketing/auth pages should be `○` whenever possible.
+
+---
+
+### 🚀 12. Route Transitions
+- **Rule**: Page transitions must not block content rendering.
+- **Best Practices**:
+  - Use `AnimatePresence mode="popLayout"` (not `"wait"`) — renders the new page immediately while the old one exits.
+  - Keep transition duration ≤ 150ms for navigations (user expects instant response).
+  - Use `initial={false}` to skip animation on first mount (avoids flash on hard navigation).
+  - Opacity-only transitions are cheapest (no layout recalculation).
+
+---
+
+### 🧹 13. Server Resource Cleanup (SSE, Streams, Intervals)
+- **Rule**: Any `ReadableStream`, `setInterval`, or long-lived server resource MUST implement a cleanup handler that fires when the client disconnects.
+- **Best Practices**:
+  - `ReadableStream` MUST implement BOTH `start()` AND `cancel()` callbacks.
+  - `cancel()` is called by the runtime when the client disconnects — use it to `clearInterval()`, `clearTimeout()`, close DB cursors, and release any held resources.
+  - Declare interval/timeout references in a scope accessible to both `start()` and `cancel()` (outside the stream constructor, or via closure).
+  - Add a hard timeout (`setTimeout`) as a safety net — but never rely on it as the primary cleanup.
+  - For MongoDB change streams or cursors in SSE routes, call `.close()` in the cancel handler.
+- **Anti-pattern**: `setInterval` inside `start()` with no `cancel()` callback. Every client disconnect orphans the interval, causing database load to grow linearly with traffic.
+- **Test**: Open the SSE endpoint in a browser, close the tab, verify server logs show the interval stopped.
+- **Applies To**: `api/*/stream`, `SSE`, `WebSocket`, `ReadableStream`
+- **Priority**: Critical
+
+---
+
+### 🔒 14. Singleton Caching for Expensive Resources
+- **Rule**: SDK clients, database topology checks, and connection pools MUST be cached in a module-level variable — never re-instantiated on every function call.
+- **Best Practices**:
+  - Use a `let cached: T | null = null` pattern for AWS SDK clients, API clients, and similar stateful objects.
+  - Cache the result of expensive runtime checks (e.g., `admin().serverStatus()`) that won't change during process lifetime.
+  - Comment the function as a singleton if that's the intent — and verify the code matches.
+- **Anti-pattern**: `function getClient() { return new S3Client({...}); }` — creates a new connection pool per call, causes socket exhaustion under load.
+- **Applies To**: `lib/`, SDK integrations, infrastructure utilities
+- **Priority**: High
+
+---
+
+### 📊 15. Live Dashboard Polling Patterns
+- **Rule**: Admin dashboards with live data MUST follow the established polling architecture.
+- **Best Practices**:
+  - Server component fetches initial data; client component handles polling + animations.
+  - Polling interval configurable via `AppSettings` (not hardcoded).
+  - Use a single `fetchStats` callback that updates all live state (stats, lists, status flags).
+  - Polling respects a Live/Paused toggle — when paused, no fetches fire.
+  - Number animations: full count-up from 0 on initial load (1.2s), smooth tick from old→new on poll updates (400ms).
+  - List updates: detect changes via hash comparison, show a transient "updated" badge with `AnimatePresence` (1.5s visibility).
+  - Charts requiring historical data MUST use a dedicated aggregation endpoint (e.g. `/api/admin/trades-chart?window=3h`) that buckets documents server-side with MongoDB `$group` by time bucket. Never derive historical chart data from polling deltas — deltas lose all history on page refresh. The endpoint must fill every time slot (including zero-trade buckets) so the chart always covers the full requested window. Support a `?window=` query param (`1h`, `3h`, `24h`) with appropriate bucket sizes (1-min buckets for ≤3h, 15-min buckets for 24h).
+- **Anti-pattern**: Polling inside individual components independently — leads to request storms. One central fetch, many consumers. Deriving chart history from delta between poll responses — resets to zero on every page load.
+- **Applies To**: `admin/`, dashboards, real-time displays
+- **Priority**: Medium
+
+---
+
+### 🧹 16. No Background Timers in Module Scope
+- **Rule**: Never use `setInterval` or `setTimeout` at module top-level for cleanup tasks. Module re-evaluation in dev (hot reload) spawns duplicate timers that are never garbage collected.
+- **Best Practices**:
+  - Use passive cleanup: check staleness inline when the resource is accessed (e.g., delete expired rate-limit entries on next request).
+  - Track a `lastCleanup` timestamp and only run cleanup if enough time has elapsed since last access.
+  - If you truly need a background timer, guard it behind `globalThis` to ensure only one instance exists across hot reloads.
+- **Anti-pattern**: `setInterval(() => cleanup(), 300_000)` at file top-level — spawns a new timer on every HMR reload.
+- **Applies To**: `lib/`, rate-limiters, caches, cleanup routines
+- **Priority**: High
+
+---
+
+### 🦴 17. Skeleton Loading for Polled Stat Cards
+- **Rule**: Stat cards that receive their value from the first poll (not SSR) MUST initialize state as `null` and render a skeleton until the first value arrives.
+- **Why**: Without this, cards flash `0` → real value on mount, which looks broken and erodes trust in the numbers.
+- **Best Practices**:
+  - Initialize as `useState<number | null>(null)`.
+  - Render `<div className="mt-2 h-8 w-20 animate-pulse rounded bg-muted" />` when value is `null`.
+  - Once the first poll resolves, set state to the real value and trigger the count-up animation from 0.
+  - Never initialize to `0` if `0` is a meaningful value the user might see — they can't distinguish "loading" from "actually zero".
+- **Anti-pattern**: `const [value, setvalue] = useState(0)` for a polled metric — renders 0 immediately, then jumps to the real value.
+- **Applies To**: `admin/`, dashboards, stat cards
+- **Priority**: Medium
+
+---
+
+### ⏳ 18. Serverless Execution Guarantees (No Unawaited Queries)
+- **Rule**: Every database read or write inside Next.js Server Actions, Route Handlers, or Middleware MUST be fully awaited (or chained/scheduled via standard execution hooks like `event.waitUntil` if supported) before returning the response.
+- **Why**: Serverless runtimes (such as Vercel) immediately freeze or terminate the CPU container once the HTTP response is sent. Any "fire-and-forget" queries (like unawaited `findOneAndUpdate().exec()`) will be aborted mid-execution, causing silent write failures.
+- **Anti-pattern**: `BetaCode.findOneAndUpdate(...).exec().catch(...)` returned directly without an `await` before sending `NextResponse.json(...)`.
+- **Applies To**: server actions, route handlers, middleware
+- **Priority**: Critical
+
+---
+
+### 🔀 19. Concurrency Limits on Batch/Cron Queries
+- **Rule**: When executing database operations or external API calls inside cron jobs or batch loops (e.g. fetching news feeds, settling scores), limit sequential waits to prevent serverless execution timeouts (5 minutes on Next.js/Vercel).
+- **Best Practices**:
+  - Do NOT execute fetches or heavy calculations sequentially in a `for` loop if the number of items is unbounded.
+  - Process items in parallel using `Promise.all()` with a concurrency limiter (like `p-limit` or chunk-based batching) set to a safe limit (e.g., 3-5 concurrent tasks) to stay within execution budgets while protecting against rate limits.
+- **Anti-pattern**: Sequentially fetching full article body texts for 50+ markets in a single cron run, exceeding function timeouts.
+- **Applies To**: cron jobs, background actions
+- **Priority**: High
+
+---
+
+## Anti-Patterns to Avoid
+
+| Anti-Pattern | Fix |
+|-------------|-----|
+| `useEffect` + `fetch` for initial data | Server Component async fetch |
+| `"use client"` on entire page | Isolate interactivity into small client islands |
+| Fetching full documents for list views | `.select()` only needed fields + `.lean()` |
+| Unbounded `.find({})` queries | Always `.limit()` + pagination |
+| Recomputing derived values on every render | `useMemo` or pre-compute in Server Component |
+| Loading 500-item lists in one render | Virtualize or paginate (≤ 20 items per page) |
+| Polling with full page refresh | Lightweight JSON endpoint + client state merge |
+| Skip/offset pagination on large collections | Cursor-based pagination with indexed `_id` |
+| Canvas running at 60fps for backgrounds | Cap at 30fps + pause on tab hidden |
+| `<Image fill>` without `sizes` prop | Add `sizes="Xpx"` matching rendered size |
+| `useSearchParams()` without Suspense | Wrap in `<Suspense>` in parent layout |
+| `AnimatePresence mode="wait"` on routes | Use `mode="popLayout"` for instant feel |
+| `ReadableStream` without `cancel()` | Always implement `cancel()` to clear intervals/timeouts |
+| `balance: 0` in CreditLedger | Fetch real post-transaction balance |
+| `new S3Client()` on every call | Cache in module-level `let` variable |
+| `setInterval` at module top-level | Passive cleanup on access with `lastCleanup` timestamp |
+| `await sleep(500)` in batch loops | Remove artificial delays — sequential DB ops are already fast |
+| Sequential `while (await findOne())` loops | Batch-fetch candidates in one query, compute in-memory |
+| In-memory Maps that grow forever (per-user, per-market) | Passive cleanup purges stale entries every 5min on access |
+| Read-modify-write on shared config docs | Use atomic `$set` with dot-notation (`value.fieldName`) |
+| Chart history derived from poll deltas | Dedicated aggregation endpoint with `$group` by time bucket |
+| Stat card initialized to `0` for polled values | `useState<number \| null>(null)` + skeleton until first poll |
+| Unawaited "fire-and-forget" queries in serverless actions | Always `await` the query before returning the response |
+| Sequential API requests in cron loops | Limit concurrency and execute in parallel chunks |
+| E2E tests failing due to database-enabled Beta Gate | Inject cookie context or disable gateway during test setup |

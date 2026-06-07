@@ -1,0 +1,32 @@
+---
+description: Rules for implementing and maintaining real-time gamification features
+globs: src/actions/achievement.actions.ts, src/hooks/useQueue.ts, src/hooks/useChat.ts, src/hooks/useAudio.ts, src/lib/*-stream.ts
+alwaysApply: false
+emoji: 🏆
+title: Real-Time & Gamification Standards
+---
+# Cursor Rule: Real-Time & Gamification Standards
+
+## 1. 📡 Real-Time Event Architecture
+- **SSE Over Polling**: Always prefer Server-Sent Events (SSE) via MongoDB Change Streams for shared UI states (Queue, Chat, Global Ticker).
+- **Event Coordination**: New real-time streams must be registered in `src/lib/` using an `EventEmitter` singleton to coordinate between the MongoDB Change Stream and multiple client SSE connections.
+- **Heartbeats**: Every SSE route MUST implement a 30s heartbeat to prevent stale connections from being terminated by load balancers or proxies.
+
+## 2. 🏅 Achievement System
+- **Single Source of Truth**: All achievement definitions (ID, name, description, icon) must live in `src/lib/achievements.config.ts`.
+- **Atomic Evaluation**: Achievements must be evaluated immediately following the action that triggers them (e.g., inside `claimPrize` or `addCredits`).
+- **Idempotency**: Use the `unique` index on `{ userId, achievementId }` in the `UserAchievement` model to ensure badges are never granted twice.
+
+## 3. 🔊 Immersive Audio & Haptics
+- **Low Latency**: Use the `useAudio` hook for all game-state sounds. Do not perform heavy asset loading inside the Arena render loop.
+- **Visual Feedback**: Every sound cue should be paired with a visual high-fidelity transition (Framer Motion) or a glowing UI state.
+- **Notification Logic**: Play sound cues (e.g., "Your Turn") based on state transitions, not just continuous polling data. Use `useRef` to track previous states for clean transition detection.
+
+## 4. 🤖 AI Integration (Gemini)
+- **Persona Consistency**: The AI Narrator ('The Narrator') must maintain its 80s arcade announcer persona.
+- **Asynchronous Execution**: AI commentary generation must occur in background engines (`scripts/narrator-engine.ts`) to avoid blocking the main user request/response cycle.
+- **Rate Limiting**: AI background engines must implement cooldowns (default 3s) to prevent social chat overflow.
+
+## 5. 💰 Financial Integrity (Credits)
+- **Atomic Operations**: Never use read-modify-write for credit balances. Always use MongoDB `$inc` and `$gte` atomic operators to prevent race conditions.
+- **Ledger Logging**: Every credit mutation MUST be accompanied by a `CreditLedger` entry for auditing.

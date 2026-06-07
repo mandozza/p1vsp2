@@ -1,0 +1,184 @@
+---
+description: Rules for development process and documentation
+globs:
+alwaysApply: true
+emoji: ⚡
+title: Strict Development Process
+---
+# Cursor Rule: Strict Development Process
+
+## 1. 📋 Pre-Development Requirements
+- **MANDATORY**: Must read and understand ALL documentation:
+  - `productrequirements.md`: Product vision and features
+  - `softwarerequirements.md`: Technical architecture and stack
+  - `userinterfacerequirements.md`: UI/UX guidelines
+  - `componentguide.md`: Component standards
+- **Planning Synchronization (Enforced)**: 
+  - All feature planning must be written inside `plans/future/[feature-name].md` using `plans/future/_template.md` as the blueprint.
+  - The AI assistant's internal planning tools will mirror these project-level plan documents.
+  - No development may begin until the feature plan is finalized and explicitly approved by the user.
+
+## 2. 🏗 Architecture & Styling Compliance
+- **ENFORCED**: Must follow Next.js App Router conventions.
+- **REQUIRED**: Implement features using prescribed tech stack:
+  - Next.js with TypeScript
+  - MongoDB with Mongoose
+  - ShadcnUI + Tailwind CSS (Note: This strictly overrides any generic CSS defaults)
+  - NextAuth.js for authentication
+  - Storybook for component documentation
+- **Styling Standard**: 
+  - Standard CSS rules are prohibited. All styles must use the ShadcnUI + Tailwind CSS system.
+  - Implement dark mode by default.
+
+## 3. 📱 Development Standards
+### Mobile-First Implementation
+- Start with mobile layout first.
+- Test on mobile viewports before desktop.
+- Implement responsive design using Tailwind breakpoints.
+
+### Component Development
+- Create Storybook stories before or during component development.
+- Follow ShadcnUI theming and customization patterns.
+- Document all props and variants using modern CSF 3.0 Storybook standards.
+
+### State Management
+- Use React Context for global UI state or lightweight client state.
+- Implement local state for component-level control.
+- Leverage Server Components for data fetching by default.
+
+## 4. 🧪 Quality Standards
+### Testing Requirements
+- Write component stories in Storybook.
+- Test all components across breakpoints.
+- Verify dark/light mode implementations.
+- Ensure accessibility (a11y) compliance (keyboard navigation, alt text, ARIA attributes).
+
+### E2E Testing with Active Gateways (Beta Gates & Auth)
+- **Rule**: When active gateways (e.g., Beta Gates, Auth requirements) are enabled in the database or configuration, the E2E test runner (Playwright) MUST be configured to bypass them programmatically.
+- **Best Practices**:
+  - In `e2e/auth.setup.ts`, inject the required cookies (e.g., `beta_access=1`, `beta_ui=1`) directly into the Playwright browser context using `context.addCookies()` rather than forcing the browser to walk through manual redemption screens.
+  - Ensure the test teardown/setup scripts configure database flags (e.g., `beta_config.enabled`) to `false` if test isolation requires public access.
+  - **Never**: Leave E2E tests relying on mutable live database flags that could change out from under the test environment and cause test timeouts/failures.
+
+### Code Quality
+- Follow TypeScript strict mode.
+- Maintain proper file structure.
+- Use proper naming conventions (PascalCase components, kebab-case files, camelCase variables).
+- Document complex logic using clear TSDoc blocks.
+
+## 5. ✅ Task & Git Management
+### Before Starting a Task
+1. Verify task exists in `todolist.md` or the approved planning checklist.
+2. Review related documentation.
+3. Check existing components in Storybook.
+4. Plan implementation approach.
+
+### After Completing a Task
+1. Update `todolist.md` / mark task as `[x]`.
+2. Add/update Storybook documentation.
+3. Create commit with meaningful message using Conventional Commits.
+4. Verify mobile and desktop views.
+
+### Git Branching and Commits (AI Execution)
+- AI assistant is authorized and expected to propose and execute git command sequences.
+- Branch naming convention: `feature/<short-description>`, `fix/<bug-description>`, `chore/<task-description>`.
+- Commit using Conventional Commits (`feat:`, `fix:`, `ui:`, `chore:`, `docs:`, `refactor:`).
+- Always sync main (`git pull origin main`) before branching.
+
+## 6. ❌ Strict Prohibitions
+- NO implementation without reading documentation.
+- NO skipping Storybook documentation.
+- NO desktop-first development.
+- NO ignoring TypeScript types or using `any`.
+- NO hardcoded values (use environment variables).
+- NO direct MongoDB calls (use Mongoose).
+- NO custom styling outside Tailwind/ShadcnUI system.
+- NO implementing features not in `todolist.md` or approved plans.
+
+## 7. 🔄 Development Flow
+1. Read documentation.
+2. Plan implementation (`plans/future/[feature].md`).
+3. Create Storybook story.
+4. Implement mobile view.
+5. Add responsive design.
+6. Test dark/light modes.
+7. Document component.
+8. Update `todolist.md`.
+9. Commit changes (`git` branch workflow).
+
+### Git Commit Strategy
+- **Rule**: Always split work into logical, atomic commits — never bundle unrelated changes into a single commit.
+- **Grouping heuristic**: Each commit should represent one coherent unit of change that could be reverted independently without breaking unrelated functionality. Group by concern:
+  - Documentation & rules updates (docs)
+  - Infrastructure / config changes (chore/refactor)
+  - Each distinct feature system (feat)
+  - Bug fixes and performance improvements (fix)
+  - Test updates (test)
+- **Commit message format**: Use conventional commits (`feat:`, `fix:`, `refactor:`, `docs:`, `chore:`, `test:`). First line under 72 characters summarizing the *why*. Body (if needed) explains the scope.
+- **Never**: Bundle a new feature, a bug fix, and a docs update in one commit. Never commit all unstaged changes with `git add -A` without reviewing what's included.
+- **Ordering**: Commit foundational changes first (models, config, infra), then features that depend on them, then fixes/polish last. This keeps `git bisect` useful.
+
+## 8. 💻 Code Organization
+- Follow prescribed folder structure:
+  ```
+  src/
+    app/          # Next.js App Router pages, layouts, and route handlers
+    components/   # React components
+    lib/         # Utilities and helpers
+    types/       # TypeScript types
+    hooks/       # Custom React hooks
+    styles/      # Global styles
+    stories/     # Storybook stories
+  ```
+
+## 9. 🎨 UI/UX Standards
+- Follow mobile-first design.
+- Implement proper loading states.
+- Add error boundaries.
+- Ensure keyboard navigation.
+- Maintain accessibility standards.
+- Support dark/light modes.
+
+## 10. 📝 Documentation Requirements
+### Component Documentation
+- Update Storybook for all new components.
+- Document props and variants.
+- Include usage examples.
+- Show responsive behavior.
+- Demonstrate theme variations.
+
+### Feature Walkthrough Documentation
+- **MANDATORY**: Create a walkthrough document for every new major feature.
+- File Location: All walkthroughs must be saved in the `walkthroughs/` directory at the project root.
+- Naming Convention: Use `[feature-name].md` (e.g., `personas-dashboard.md` or `authentication-flow.md`).
+- Content Requirements:
+  - High-level summary of the feature.
+  - Explanation of the changes made (Database, API, Frontend).
+  - Instructions on how to verify/test the feature.
+  - Screenshots or visual layout descriptions where applicable.
+
+## 11. 🤖 AI / LLM Usage Policy
+
+### Prefer Deterministic Logic Over LLM Calls
+- **Rule**: Before reaching for Gemini (or any LLM), ask: *can this be solved with a scoring function, rule set, or lookup table?* If yes, implement it that way.
+- **When deterministic is preferred**:
+  - Classification tasks with a known, finite set of outcomes (user types, interest levels, categories)
+  - Scoring or ranking based on measurable signals (page counts, time spent, paths visited)
+  - Validation, formatting, or transformation of structured data
+  - Any logic that must be consistent, auditable, or testable
+- **When LLM is justified**:
+  - Free-text generation that requires natural language (agent comments, market analysis summaries)
+  - Tasks where the input space is unbounded and rules cannot enumerate all cases
+  - Creative or contextual output that cannot be reduced to a formula
+- **Anti-pattern**: Using Gemini to classify structured data (e.g. page journey → user type) when a weighted signal scoring function produces the same result deterministically, faster, and for free.
+- **Example**: Beta user journey classification uses `classifyJourney()` in `src/actions/betaEvaluation.actions.ts` — a weighted signal scorer — rather than an LLM prompt. This is the correct pattern.
+- **Applies To**: all server actions, API routes, background jobs
+- **Priority**: High
+
+## Validation Rules
+- ❌ Cannot start coding until documentation is reviewed.
+- ❌ Cannot skip mobile-first implementation.
+- ❌ Cannot ignore Storybook documentation.
+- ❌ Cannot implement undocumented features.
+- ❌ Cannot bypass TypeScript strict mode.
+- ❌ Cannot merge without proper walkthrough documentation.

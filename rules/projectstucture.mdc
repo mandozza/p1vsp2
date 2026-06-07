@@ -1,0 +1,96 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+---
+description:
+globs:
+alwaysApply: true
+emoji: 📋
+title: Project Structure and Dependencies
+---
+
+# Cursor Rule: Project Structure and Dependencies
+
+## Description
+Ensure consistent handling of dependencies and file structure in the Next.js project. These rules enforce checking existing dependencies before suggesting installations and maintaining proper file organization.
+
+## Rules
+
+---
+
+### 📦 1. Dependency Management
+- **Rule**: Always check package.json before suggesting new dependencies
+- **Best Practices**:
+  - Check both `dependencies` and `devDependencies` sections
+  - Note version requirements and compatibility
+  - Consider existing similar packages that might serve the same purpose
+- **Applies To**: `dependencies`, `installation`, `packages`
+- **Priority**: Critical
+
+---
+
+### 📁 2. Source Directory Structure
+- **Rule**: All new code must follow the established src/ directory structure
+- **Best Practices**:
+  - Place components in `src/components/`
+  - Place pages in `src/app/` (Next.js App Router)
+  - Place types in `src/types/`
+  - Place hooks in `src/hooks/`
+  - Place utilities in `src/lib/`
+  - Place contexts in `src/contexts/`
+  - Place models in `src/models/`
+- **Applies To**: `structure`, `organization`, `files`
+- **Priority**: Critical
+
+---
+
+### 🔍 3. Import Path Resolution
+- **Rule**: Use `@/` alias for imports from the src directory
+- **Best Practices**:
+  - Use `@/components/` instead of `../../components`
+  - Use `@/lib/` instead of relative paths
+  - Maintain consistent import style across files
+- **Applies To**: `imports`, `paths`, `organization`
+- **Priority**: High
+
+---
+
+### 🧪 4. Feature Implementation
+- **Rule**: Check existing implementation before suggesting new solutions
+- **Best Practices**:
+  - Search codebase for similar implementations
+  - Review existing utilities and hooks
+  - Consider extending existing solutions before creating new ones
+- **Applies To**: `features`, `code reuse`, `DRY`
+- **Priority**: High
+
+---
+
+### 🛡️ 5. Admin Section Architecture
+- **Rule**: The admin section (`src/app/(admin)/admin/`) is a fully isolated experience with its own nav, layout, and patterns. All new admin pages MUST follow these conventions.
+- **Layout**:
+  - Admin has its own top-level navbar (`admin/layout.tsx`) — NOT the user-facing Navbar.
+  - The user Navbar and Footer hide themselves on `/admin/*` routes via pathname check.
+  - Admin layout includes: brand + nav links + "View Site" escape hatch + theme toggle + sign out.
+- **Page patterns**:
+  - Header: icon + title + subtitle, consistent across all admin pages.
+  - Use `StatCard` for key metrics, `Badge` for status indicators.
+  - Tables use `rounded-xl border border-border shadow-sm shadow-primary/5` card styling.
+  - Filter pills use the `StatusFilter`/`RoleFilter` pattern (rounded-lg, active state with primary bg).
+- **Dashboard specifics**:
+  - Split into server component (data fetching) + client component (animations, polling).
+  - Live polling via `/api/admin/stats` with configurable interval from AppSettings.
+  - Animated stat cards: count-up on initial load (1.2s cubic ease), smooth tick on refresh (400ms linear).
+  - Live/Paused toggle + Bot On/Off status badge in header.
+  - "Updated" badges with `AnimatePresence` fade in/out on data change.
+- **Security**:
+  - Middleware enforces `token.role === 'admin'` on all `/admin/*` routes.
+  - Individual pages still check role as defense-in-depth.
+  - New admin pages do NOT need manual role checks to be secure (middleware handles it), but SHOULD include them.
+- **Settings**:
+  - Admin-configurable values (polling interval, agent config, sync settings) live in `AppSettings` collection as key-value docs.
+  - Use `getDashboardConfig()` / `updateDashboardConfig()` pattern from `settings.actions.ts`.
+- **Applies To**: `admin`, `dashboard`, `layout`
+- **Priority**: High
