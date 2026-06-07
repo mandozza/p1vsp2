@@ -41,6 +41,73 @@ const PRIZES = [
   { name: 'Synth Snail', type: 'stuffy', inventoryCount: 4 },
 ];
 
+const GAMES = [
+  {
+    title: 'UFC 6',
+    slug: 'ufc-6',
+    gameType: 'FIGHTING',
+    active: true,
+    thumbnailUrl: 'https://picsum.photos/seed/ufc6/800/400',
+    aiPrompt: 'Analyze this UFC 6 end-of-game screenshot. Identify the winner and loser by their gamer tags. Determine the method of victory (KO, TKO, SUB, DEC), the round, and the time. Check if the screen indicates a disconnection, forfeit, or "Connection Lost" state.',
+  },
+  {
+    title: 'Street Fighter 6',
+    slug: 'street-fighter-6',
+    gameType: 'FIGHTING',
+    active: true,
+    thumbnailUrl: 'https://picsum.photos/seed/sf6/800/400',
+    aiPrompt: 'Analyze this Street Fighter 6 victory screen. Identify the winning character and player. Extract the number of rounds won by each player and check for "PERFECT" or "DOUBLE PERFECT" indicators. Identify the method of finish (Critical Art, Special Move, etc).',
+  },
+  {
+    title: 'Madden 26',
+    slug: 'madden-26',
+    gameType: 'SPORTS',
+    active: true,
+    thumbnailUrl: 'https://picsum.photos/seed/madden26/800/400',
+    aiPrompt: 'Analyze this Madden 26 end-game screen. Identify the "Winner" based on the final score. Extract the "Home Team Score" and "Away Team Score". Check if the game ended via "Concede" or disconnection.',
+  },
+  {
+    title: 'FC 26',
+    slug: 'fc-26',
+    gameType: 'SPORTS',
+    active: true,
+    thumbnailUrl: 'https://picsum.photos/seed/fc26/800/400',
+    aiPrompt: 'Analyze this FC 26 (FIFA) final result screen. Extract the score for both teams and identify the winner. Identify individual goal scorers if visible. Check if the match was decided in "Extra Time" or "Penalties".',
+  },
+  {
+    title: 'NBA 2K26',
+    slug: 'nba-2k26',
+    gameType: 'SPORTS',
+    active: true,
+    thumbnailUrl: 'https://picsum.photos/seed/nba2k26/800/400',
+    aiPrompt: 'Analyze this NBA 2K26 end-game screen. Identify the winning team and final score. Extract key player stats if visible (Points, Rebounds, Assists). Check for "Quit" indicators or early forfeits.',
+  },
+  {
+    title: 'Tekken 8',
+    slug: 'tekken-8',
+    gameType: 'FIGHTING',
+    active: true,
+    thumbnailUrl: 'https://picsum.photos/seed/tekken8/800/400',
+    aiPrompt: 'Analyze this Tekken 8 victory screen. Identify the winning character and player tag. Extract the number of rounds won (e.g., 3-1) and check for "PERFECT" or "GREAT" victory indicators.',
+  },
+  {
+    title: 'Call of Duty: Black Ops 6',
+    slug: 'cod-bo6',
+    gameType: 'SHOOTER',
+    active: true,
+    thumbnailUrl: 'https://picsum.photos/seed/codbo6/800/400',
+    aiPrompt: 'Analyze this Call of Duty: Black Ops 6 post-match scoreboard. Identify the winning team or player. Extract Kills, Deaths, and Score for the top players. Identify the match type (TDM, Domination, etc).',
+  },
+  {
+    title: 'Gran Turismo 7',
+    slug: 'gt7',
+    gameType: 'RACING',
+    active: true,
+    thumbnailUrl: 'https://picsum.photos/seed/gt7/800/400',
+    aiPrompt: 'Analyze this Gran Turismo 7 race result screen. Identify the winner (P1) and their total race time. Extract podium positions (P2, P3) and the time gap between them. Identify the track and car used if visible.',
+  },
+];
+
 async function seed() {
   try {
     console.log('🌱 Starting seed...');
@@ -63,6 +130,8 @@ async function seed() {
       creditBalance: 1000000,
       eloRating: 2500,
       stats: { wins: 0, losses: 0, draws: 0, dnfs: 0 },
+      verificationStatus: 'verified',
+      gamerTag: 'ADMIN_OP',
     });
     console.log('👤 Admin user created.');
 
@@ -75,6 +144,8 @@ async function seed() {
       creditBalance: 5000,
       eloRating: 1500,
       stats: { wins: 42, losses: 10, draws: 2, dnfs: 1 },
+      verificationStatus: 'verified',
+      gamerTag: 'CLAW_MSTR',
     });
     
     await User.create({
@@ -85,6 +156,8 @@ async function seed() {
       creditBalance: 2000,
       eloRating: 1800,
       stats: { wins: 28, losses: 5, draws: 0, dnfs: 0 },
+      verificationStatus: 'verified',
+      gamerTag: 'ARC_LEGENDA',
     });
 
     await User.create({
@@ -95,17 +168,15 @@ async function seed() {
       creditBalance: 1500,
       eloRating: 1200,
       stats: { wins: 15, losses: 15, draws: 5, dnfs: 0 },
+      verificationStatus: 'unverified',
     });
     console.log('👤 Demo users created.');
 
-    // Create Game
-    await Game.create({
-      title: 'UFC 6',
-      slug: 'ufc-6',
-      active: true,
-      thumbnailUrl: 'https://picsum.photos/seed/ufc6/800/400',
-    });
-    console.log('🎮 Game "UFC 6" created.');
+    // Create Games
+    for (const gameData of GAMES) {
+      await Game.create(gameData);
+      console.log(`🎮 Game "${gameData.title}" created.`);
+    }
 
     // Create Machines and Prizes
     for (const machineData of MACHINES) {
