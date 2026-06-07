@@ -17,11 +17,12 @@ import { evaluateMatchAchievements } from './achievement.actions';
 import { createNotification } from './notification.actions';
 import { checkTournamentProgression } from './tournament.actions';
 import { updateRivalry } from './rivalry.actions';
+import { transferCredits } from '@/lib/economy';
 
 /**
  * Creates a new match challenge.
  */
-export async function createChallenge(defenderId: string, gameId: string): Promise<ActionResult> {
+export async function createChallenge(defenderId: string, gameId: string, wagerAmount = 0): Promise<ActionResult> {
   try {
     await dbConnect();
     const session = await getServerSession(authOptions);
@@ -30,11 +31,22 @@ export async function createChallenge(defenderId: string, gameId: string): Promi
     const challengerId = session.user.id;
     if (challengerId === defenderId) return { success: false, error: 'You cannot challenge yourself' };
 
+    // 1. Escrow Challenger Credits
+    if (wagerAmount > 0) {
+      const escrow = await transferCredits({
+        userId: challengerId,
+        amount: -wagerAmount,
+        type: 'WAGER_ESCROW',
+      });
+      if (!escrow.success) return { success: false, error: `Escrow failed: ${escrow.error}` };
+    }
+
     const match = await Match.create({
       gameId,
       challengerId,
       defenderId,
       status: 'pending',
+      wagerAmount,
     });
 
     // Notify Defender
@@ -42,7 +54,7 @@ export async function createChallenge(defenderId: string, gameId: string): Promi
       userId: defenderId,
       type: 'CHALLENGE_RECEIVED',
       title: 'New Challenge!',
-      message: `${session.user.name} challenged you to a match!`,
+      message: `${session.user.name} challenged you to a match! ${wagerAmount > 0 ? `Wager: ${wagerAmount} Credits` : ''}`,
       link: `/matches`,
     });
 
@@ -67,7 +79,52 @@ export async function acceptChallenge(matchId: string): Promise<ActionResult> {
     if (match.defenderId.toString() !== session.user.id) return { success: false, error: 'Unauthorized' };
     if (match.status !== 'pending') return { success: false, error: 'Challenge is no longer pending' };
 
+    // 1. Escrow Defender Credits
+    if (match.wagerAmount > 0) {
+      const escrow = await transferCredits({
+        userId: session.user.id,
+        amount: -match.wagerAmount,
+        type: 'WAGER_ESCROW',
+        referenceId: match._id,
+      });
+      if (!escrow.success) return { success: false, error: `Escrow failed: ${escrow.error}` };
+    }
+
     match.status = 'accepted';
+    await match.save();
+
+    revalidatePath('/matches');
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Cancels a match challenge and refunds the challenger.
+ */
+export async function cancelChallenge(matchId: string): Promise<ActionResult> {
+  try {
+    await dbConnect();
+    const session = await getServerSession(authOptions);
+    if (!session?.user) return { success: false, error: 'Unauthorized' };
+
+    const match = await Match.findById(matchId);
+    if (!match) return { success: false, error: 'Match not found' };
+    if (match.challengerId.toString() !== session.user.id) return { success: false, error: 'Unauthorized' };
+    if (match.status !== 'pending') return { success: false, error: 'Cannot cancel active match' };
+
+    // 1. Refund Challenger
+    if (match.wagerAmount > 0) {
+      await transferCredits({
+        userId: match.challengerId.toString(),
+        amount: match.wagerAmount,
+        type: 'WAGER_REFUND',
+        referenceId: match._id,
+      });
+    }
+
+    match.status = 'cancelled';
     await match.save();
 
     revalidatePath('/matches');
@@ -225,6 +282,20 @@ export async function resolveMatch(
     if (outcome.isDNF) loser.stats.dnfs += 1;
     await loser.save();
 
+    // 1. Resolve Wager
+    if (match.wagerAmount > 0) {
+      const potSize = match.wagerAmount * 2;
+      await transferCredits({
+        userId: winner._id.toString(),
+        amount: potSize,
+        type: 'WAGER_WIN',
+        referenceId: match._id,
+      });
+      // Loser already lost credits during escrow, so no further action needed here
+      // unless we want to log the loss explicitly in the ledger again? 
+      // No, escrow logged it as WAGER_ESCROW.
+    }
+
     // Generate Narrator Commentary
     const commentary = await generateCommentary({
       winnerName: winner.username,
@@ -258,7 +329,7 @@ export async function resolveMatch(
         userId: winner._id.toString(),
         type: 'MATCH_RESOLVED',
         title: 'Victory Verified!',
-        message: `Your match against ${loser.username} was resolved. You won!`,
+        message: `Your match against ${loser.username} was resolved. You won${match.wagerAmount > 0 ? ` the pot of ${match.wagerAmount * 2} credits!` : '!'}`,
         link: `/matches/${matchId}`,
       }),
       createNotification({

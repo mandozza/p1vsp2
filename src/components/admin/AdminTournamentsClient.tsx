@@ -111,13 +111,19 @@ export function AdminTournamentsClient({ initialTournaments, games }: { initialT
                 <label className="text-[8px] font-black uppercase tracking-widest text-white/40 ml-1">Tournament Name</label>
                 <input name="name" className="w-full rounded-xl border border-white/5 bg-white/5 p-4 text-[10px] font-bold text-white focus:outline-none focus:border-neon-pink/50" placeholder="e.g. UFC 6 World Series" required />
               </div>
-              <div className="space-y-2">
-                <label className="text-[8px] font-black uppercase tracking-widest text-white/40 ml-1">Game Protocol</label>
-                <select name="gameId" className="w-full rounded-xl border border-white/5 bg-white/5 p-4 text-[10px] font-bold text-white focus:outline-none appearance-none">
-                   {games.map(g => (
-                     <option key={g._id} value={g._id}>{g.title}</option>
-                   ))}
-                </select>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[8px] font-black uppercase tracking-widest text-white/40 ml-1">Game Protocol</label>
+                  <select name="gameId" className="w-full rounded-xl border border-white/5 bg-white/5 p-4 text-[10px] font-bold text-white focus:outline-none appearance-none">
+                     {games.map(g => (
+                       <option key={g._id} value={g._id}>{g.title}</option>
+                     ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[8px] font-black uppercase tracking-widest text-white/40 ml-1">Entry Fee</label>
+                  <input name="entryFee" type="number" className="w-full rounded-xl border border-white/5 bg-white/5 p-4 text-[10px] font-bold text-white focus:outline-none focus:border-neon-pink/50" placeholder="0" />
+                </div>
               </div>
               <div className="flex space-x-4 pt-4">
                 <button type="submit" disabled={loading} className="flex-1 rounded-xl bg-neon-pink py-4 text-[10px] font-black uppercase tracking-widest text-white glow-pink">

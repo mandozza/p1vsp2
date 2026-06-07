@@ -10,6 +10,8 @@ export interface ITournament extends Document {
     matches: mongoose.Types.ObjectId[];
   }[];
   championId?: mongoose.Types.ObjectId;
+  entryFee: number;
+  prizePool: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -31,6 +33,8 @@ const TournamentSchema = new Schema<ITournament>(
       }
     ],
     championId: { type: Schema.Types.ObjectId, ref: 'User' },
+    entryFee: { type: Number, default: 0 },
+    prizePool: { type: Number, default: 0 },
   },
   { timestamps: true }
 );

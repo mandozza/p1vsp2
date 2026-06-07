@@ -4,66 +4,60 @@ import dbConnect from '@/lib/db';
 
 export interface ChatEvent {
   id: string;
-  machineId?: string;
   userId: string;
-  userName: string;
-  userColor: string;
-  text: string;
-  createdAt: Date;
+  username: string;
+  message: string;
+  timestamp: Date;
 }
 
-const emitter = new EventEmitter();
-emitter.setMaxListeners(500);
+const chatEmitter = new EventEmitter();
+chatEmitter.setMaxListeners(500);
 
-let changeStreamInitialized = false;
+let chatChangeStreamInitialized = false;
 
-async function initChangeStream() {
-  if (changeStreamInitialized) return;
+async function initChatChangeStream() {
+  if (chatChangeStreamInitialized) return;
   
   try {
     await dbConnect();
     const db = mongoose.connection.db;
     if (!db) return;
 
-    changeStreamInitialized = true;
+    chatChangeStreamInitialized = true;
 
     const collection = db.collection('chatmessages');
-    
-    // Watch for new chat messages
-    const stream = collection.watch(
-      [{ $match: { operationType: 'insert' } }],
-      { fullDocument: 'updateLookup' }
-    );
+    const stream = collection.watch([{ $match: { operationType: 'insert' } }], { fullDocument: 'updateLookup' });
 
-    stream.on('change', (change: any) => {
-      if (change.operationType === 'insert' && change.fullDocument) {
+    stream.on('change', async (change: any) => {
+      if (change.fullDocument) {
         const doc = change.fullDocument;
+        const user = await mongoose.model('User').findById(doc.userId).select('username').lean();
+
         const event: ChatEvent = {
           id: String(doc._id),
-          machineId: doc.machineId ? String(doc.machineId) : undefined,
-          userId: doc.userId,
-          userName: doc.userName,
-          userColor: doc.userColor,
-          text: doc.text,
-          createdAt: doc.createdAt || new Date(),
+          userId: String(doc.userId),
+          username: user?.username || 'Unknown',
+          message: doc.message,
+          timestamp: doc.createdAt,
         };
-        emitter.emit('chat_message', event);
+        
+        chatEmitter.emit('message', event);
       }
     });
 
     stream.on('error', () => {
-      changeStreamInitialized = false;
-      setTimeout(initChangeStream, 5000);
+      chatChangeStreamInitialized = false;
+      setTimeout(initChatChangeStream, 5000);
     });
 
   } catch (error) {
     console.error('Failed to init Chat Change Stream:', error);
-    changeStreamInitialized = false;
+    chatChangeStreamInitialized = false;
   }
 }
 
 export function onChatMessage(callback: (event: ChatEvent) => void): () => void {
-  initChangeStream();
-  emitter.on('chat_message', callback);
-  return () => emitter.off('chat_message', callback);
+  initChatChangeStream();
+  chatEmitter.on('message', callback);
+  return () => chatEmitter.off('message', callback);
 }

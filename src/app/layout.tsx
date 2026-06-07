@@ -7,6 +7,7 @@ import { Navbar } from '@/components/layout/Navbar';
 import { Footer } from '@/components/layout/Footer';
 import { MeshGradient } from '@/components/layout/MeshGradient';
 import { GlobalTicker } from '@/components/layout/GlobalTicker';
+import { GlobalChat } from '@/components/layout/GlobalChat';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
@@ -47,6 +48,7 @@ export default function RootLayout({
               <Footer />
             </div>
             <GlobalTicker />
+            <GlobalChat />
           </ThemeProvider>
         </SessionProvider>
       </body>

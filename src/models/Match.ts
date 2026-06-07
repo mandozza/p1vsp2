@@ -45,6 +45,7 @@ export const MatchSchema = z.object({
   })).default([]),
   tournamentId: z.string().optional(),
   tournamentRound: z.number().optional(),
+  wagerAmount: z.number().int().nonnegative().default(0),
 });
 
 export type IMatch = z.infer<typeof MatchSchema> & {
@@ -99,6 +100,7 @@ const MatchMongooseSchema = new Schema<IMatchDocument>(
     ],
     tournamentId: { type: Schema.Types.ObjectId, ref: 'Tournament' },
     tournamentRound: { type: Number },
+    wagerAmount: { type: Number, default: 0 },
   },
   { timestamps: true }
 );

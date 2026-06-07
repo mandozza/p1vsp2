@@ -7,6 +7,7 @@ import Image from 'next/image';
 import { getUserAchievements } from '@/actions/achievement.actions';
 import { getUserRivalries } from '@/actions/rivalry.actions';
 import { ACHIEVEMENTS } from '@/lib/achievements.config';
+import { CombatAnalyst } from '@/components/custom/CombatAnalyst';
 
 export default async function ProfilePage({ params }: { params: { username: string } }) {
   await dbConnect();
@@ -57,6 +58,8 @@ export default async function ProfilePage({ params }: { params: { username: stri
           </div>
         </div>
       </div>
+
+      <CombatAnalyst username={user.username} />
 
       <div className="grid gap-8 lg:grid-cols-3">
         {/* Left Column: Stats & Reputation */}

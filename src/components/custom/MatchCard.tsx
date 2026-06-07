@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Swords, Check, X, Camera, Loader2, ChevronRight } from 'lucide-react';
+import { Swords, Check, X, Camera, Loader2, ChevronRight, Coins } from 'lucide-react';
 import { acceptChallenge } from '@/actions/match.actions';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
@@ -51,9 +51,17 @@ export function MatchCard({
           <h3 className="text-lg font-bold text-white uppercase tracking-tight">
             vs <span className="text-neon-pink">{opponent.username}</span>
           </h3>
-          <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest mt-1">
-            {isPending ? (isDefender ? 'They challenged you' : 'Waiting for them...') : 'Battle in progress'}
-          </p>
+          <div className="flex items-center space-x-3 mt-1">
+            <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">
+              {isPending ? (isDefender ? 'They challenged you' : 'Waiting for them...') : 'Battle in progress'}
+            </p>
+            {match.wagerAmount > 0 && (
+              <div className="flex items-center space-x-1 rounded-full bg-neon-cyan/10 px-2 py-0.5 border border-neon-cyan/20">
+                 <Coins className="h-2 w-2 text-neon-cyan" />
+                 <span className="text-[8px] font-black text-neon-cyan uppercase">Pot: {match.wagerAmount * 2}</span>
+              </div>
+            )}
+          </div>
         </div>
 
         {isPending && isDefender ? (

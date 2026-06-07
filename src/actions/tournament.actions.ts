@@ -9,11 +9,12 @@ import { authOptions } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
 import { ActionResult } from './credit.actions';
 import { createNotification } from './notification.actions';
+import { transferCredits } from '@/lib/economy';
 
 /**
  * Creates a new tournament.
  */
-export async function createTournament(data: { name: string; gameId: string }): Promise<ActionResult> {
+export async function createTournament(data: { name: string; gameId: string; entryFee?: number }): Promise<ActionResult> {
   const session = await getServerSession(authOptions);
   if (!session?.user || session.user.role !== 'admin') throw new Error('Unauthorized');
 
@@ -23,6 +24,8 @@ export async function createTournament(data: { name: string; gameId: string }): 
     status: 'registration',
     participants: [],
     rounds: [],
+    entryFee: data.entryFee || 0,
+    prizePool: 0,
   });
 
   revalidatePath('/admin/tournaments');
@@ -31,7 +34,7 @@ export async function createTournament(data: { name: string; gameId: string }): 
 }
 
 /**
- * Registers the current user for a tournament.
+ * Registers the current user for a tournament and collects the entry fee.
  */
 export async function registerForTournament(tournamentId: string): Promise<ActionResult> {
   const session = await getServerSession(authOptions);
@@ -44,6 +47,20 @@ export async function registerForTournament(tournamentId: string): Promise<Actio
 
   if (tournament.participants.includes(session.user.id as any)) {
     return { success: false, error: 'Already registered' };
+  }
+
+  // 1. Collect Entry Fee
+  if (tournament.entryFee > 0) {
+    const fee = await transferCredits({
+      userId: session.user.id,
+      amount: -tournament.entryFee,
+      type: 'TOURNAMENT_FEE',
+      referenceId: tournament._id,
+    });
+    if (!fee.success) return { success: false, error: `Fee collection failed: ${fee.error}` };
+    
+    // Update Prize Pool
+    tournament.prizePool += tournament.entryFee;
   }
 
   tournament.participants.push(session.user.id as any);
@@ -99,9 +116,6 @@ export async function startTournament(tournamentId: string): Promise<ActionResul
           link: `/matches/${match._id}`,
         })
       ]);
-    } else {
-      // Handle BYE: Player automatically advances (we'll implement properly in round logic)
-      // For now, we'll assume even numbers for simplicity or just create a placeholder
     }
   }
 
@@ -140,12 +154,22 @@ export async function checkTournamentProgression(tournamentId: string) {
       tournament.championId = winners[0] as any;
       await tournament.save();
       
+      // Award Prize Pool
+      if (tournament.prizePool > 0) {
+        await transferCredits({
+          userId: winners[0]!.toString(),
+          amount: tournament.prizePool,
+          type: 'TOURNAMENT_WIN',
+          referenceId: tournament._id,
+        });
+      }
+
       const winner = await User.findById(winners[0]);
       await createNotification({
         userId: winners[0]!.toString(),
         type: 'ACHIEVEMENT_UNLOCKED',
         title: 'TOURNAMENT CHAMPION!',
-        message: `You won ${tournament.name}! THE SECTOR IS YOURS!`,
+        message: `You won ${tournament.name}${tournament.prizePool > 0 ? ` and the prize pool of ${tournament.prizePool} credits!` : '!'}`,
         link: `/profile/${winner?.username}`,
       });
       

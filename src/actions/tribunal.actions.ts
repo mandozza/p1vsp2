@@ -8,6 +8,7 @@ import { revalidatePath } from 'next/cache';
 import { ActionResult } from './credit.actions';
 import { resolveMatch } from './match.actions';
 import { evaluateTribunalAchievements } from './achievement.actions';
+import { transferCredits } from '@/lib/economy';
 
 /**
  * Casts a vote for a disputed match.
@@ -41,6 +42,14 @@ export async function castTribunalVote(
     });
 
     await match.save();
+
+    // Reward the voter
+    await transferCredits({
+      userId: session.user.id,
+      amount: 50,
+      type: 'TRIBUNAL_REWARD',
+      referenceId: match._id,
+    });
 
     // Evaluate Achievements
     await evaluateTribunalAchievements(session.user.id);

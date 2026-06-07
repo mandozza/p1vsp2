@@ -21,6 +21,14 @@ export const UserSchema = z.object({
     draws: 0,
     dnfs: 0,
   }),
+  avatarUrl: z.string().url().optional(),
+  bannerUrl: z.string().url().optional(),
+  linkedAccounts: z.object({
+    psn: z.string().optional(),
+    xbox: z.string().optional(),
+    discord: z.string().optional(),
+  }).default({}),
+  friends: z.array(z.string()).default([]),
 });
 
 export type IUser = z.infer<typeof UserSchema> & {
@@ -47,6 +55,14 @@ const UserMongooseSchema = new Schema<IUserDocument>(
       draws: { type: Number, required: true, default: 0 },
       dnfs: { type: Number, required: true, default: 0 },
     },
+    avatarUrl: { type: String },
+    bannerUrl: { type: String },
+    linkedAccounts: {
+      psn: { type: String },
+      xbox: { type: String },
+      discord: { type: String },
+    },
+    friends: [{ type: Schema.Types.ObjectId, ref: 'User' }],
   },
   { timestamps: true }
 );

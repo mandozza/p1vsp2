@@ -1,33 +1,25 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { ChatEvent } from '@/lib/chat-stream';
-import { getLatestMessages } from '@/actions/chat.actions';
+import { useState, useEffect, useRef } from 'react';
 
-export function useChat(machineId?: string) {
+export function useChat() {
   const [messages, setMessages] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
   const eventSourceRef = useRef<EventSource | null>(null);
 
-  const fetchHistory = useCallback(async () => {
-    const history = await getLatestMessages(machineId);
-    setMessages(history);
-    setLoading(false);
-  }, [machineId]);
-
   useEffect(() => {
-    fetchHistory();
+    // Initial fetch
+    fetch('/api/chat/history')
+      .then(res => res.json())
+      .then(data => setMessages(data.reverse()));
 
-    const url = machineId 
-      ? `/api/chat/stream?machineId=${machineId}` 
-      : '/api/chat/stream';
-    
-    const es = new EventSource(url);
+    const es = new EventSource('/api/chat/stream');
 
     es.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        setMessages(prev => [...prev, data].slice(-100)); // Keep latest 100 in memory
+        if (data.type === 'CONNECTED') return;
+
+        setMessages(prev => [...prev, data].slice(-100)); // Keep latest 100
       } catch (e) {
         console.error('Failed to parse chat message:', e);
       }
@@ -38,7 +30,7 @@ export function useChat(machineId?: string) {
     return () => {
       es.close();
     };
-  }, [machineId, fetchHistory]);
+  }, []);
 
-  return { messages, loading };
+  return { messages };
 }
