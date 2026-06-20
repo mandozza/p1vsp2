@@ -1,9 +1,12 @@
-import dbConnect from '@/lib/db';
+import { db } from '@/lib/db';
 import { User } from '@/models/User';
 import { Match } from '@/models/Match';
+import { Game } from '@/models/Game';
 import { notFound } from 'next/navigation';
-import { Trophy, Swords, Zap, Shield, Target, Activity, ShieldCheck, Gavel, Flame, Crown } from 'lucide-react';
+import { Trophy, Swords, Zap, Shield, Target, Activity, ShieldCheck, Gavel, Flame, Crown, User as UserIcon } from 'lucide-react';
 import Image from 'next/image';
+import Link from 'next/link';
+import { cn } from '@/lib/utils';
 import { getUserAchievements } from '@/actions/achievement.actions';
 import { getUserRivalries } from '@/actions/rivalry.actions';
 import { ACHIEVEMENTS } from '@/lib/achievements.config';
@@ -11,33 +14,77 @@ import { CombatAnalyst } from '@/components/custom/CombatAnalyst';
 import { VerificationSector } from '@/components/custom/VerificationSector';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { eq, and, or, desc } from 'drizzle-orm';
 
 export default async function ProfilePage({ params }: { params: { username: string } }) {
-  await dbConnect();
   const session = await getServerSession(authOptions);
 
-  const user = await User.findOne({ username: params.username })
-    .populate('gameStats.gameId', 'title')
-    .lean();
-  if (!user) notFound();
+  // 1. Fetch user
+  const [rawUser] = await db.select().from(User).where(eq(User.username, params.username));
+  if (!rawUser) notFound();
+
+  // 2. Fetch all games to populate gameStats details in memory
+  const allGames = await db.select().from(Game);
+  const gamesMap = new Map(allGames.map((g: any) => [String(g.id), { _id: g.id, id: g.id, title: g.title }]));
+
+  const populatedGameStats = rawUser.gameStats?.map((gs: any) => {
+    const g = gamesMap.get(String(gs.gameId));
+    return {
+      ...gs,
+      gameId: g || { _id: gs.gameId, id: gs.gameId, title: 'Unknown Game' }
+    };
+  }) || [];
+
+  const user = {
+    ...rawUser,
+    _id: rawUser.id,
+    id: rawUser.id,
+    gameStats: populatedGameStats
+  };
 
   const [achievements, rivalries] = await Promise.all([
-    getUserAchievements(user._id.toString()),
-    getUserRivalries(user._id.toString()),
+    getUserAchievements(user.id),
+    getUserRivalries(user.id),
   ]);
 
-  const isOwner = session?.user?.id === user._id.toString();
+  const isOwner = session?.user?.id === user.id;
 
-  const matchHistory = await Match.find({
-    $or: [{ challengerId: user._id }, { defenderId: user._id }],
-    status: 'completed'
-  })
-  .populate('challengerId', 'username')
-  .populate('defenderId', 'username')
-  .populate('gameId', 'title')
-  .sort({ updatedAt: -1 })
-  .limit(10)
-  .lean();
+  // 3. Fetch match history (last 10 completed matches)
+  const rawMatchHistory = await db.query.matches.findMany({
+    where: and(
+      or(eq(Match.challengerId, user.id), eq(Match.defenderId, user.id)),
+      eq(Match.status, 'completed')
+    ),
+    orderBy: [desc(Match.updatedAt)],
+    limit: 10,
+    with: {
+      challenger: {
+        columns: {
+          username: true,
+        }
+      },
+      defender: {
+        columns: {
+          username: true,
+        }
+      },
+      game: {
+        columns: {
+          title: true,
+        }
+      }
+    }
+  });
+
+  const matchHistory = rawMatchHistory.map((m: any) => ({
+    ...m,
+    _id: m.id,
+    id: m.id,
+    challengerId: m.challenger ? { _id: m.challengerId, username: m.challenger.username } : { _id: '', username: 'Unknown' },
+    defenderId: m.defender ? { _id: m.defenderId, username: m.defender.username } : { _id: '', username: 'Unknown' },
+    gameId: m.game ? { _id: m.gameId, title: m.game.title } : { _id: '', title: 'Unknown Game' },
+  }));
+
 
   return (
     <div className="container mx-auto px-4 py-12 max-w-6xl">
@@ -59,42 +106,42 @@ export default async function ProfilePage({ params }: { params: { username: stri
                 {user.avatarUrl ? (
                   <Image src={user.avatarUrl} alt="Avatar" fill className="object-cover" />
                 ) : (
-                  <span className="text-5xl font-black text-white uppercase italic">{user.username[0]}</span>
+                  <UserIcon className="h-16 w-16 text-white/20" />
                 )}
              </div>
           </div>
 
-          <div className="text-center md:text-left flex-1">
-            <div className="flex items-center justify-center md:justify-start space-x-3 mb-2">
-               <h1 className="text-4xl font-black uppercase tracking-tighter text-white italic">
-                 {user.username}
-               </h1>
-               {user.verificationStatus === 'verified' && (
-                 <div className="rounded-full bg-neon-cyan/20 p-1 border border-neon-cyan/30 glow-cyan shadow-[0_0_10px_rgba(0,255,255,0.2)]">
-                    <ShieldCheck className="h-4 w-4 text-neon-cyan" />
-                 </div>
-               )}
-            </div>
-            <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 mb-4">
-               <Badge icon={Shield} label={user.role === 'admin' ? 'Operator' : 'Member'} color="purple" />
-               {user.linkedAccounts?.discord && <span className="text-[8px] font-black text-white/20 uppercase tracking-widest border border-white/5 px-2 py-1 rounded-lg">Discord: {user.linkedAccounts.discord}</span>}
-            </div>
-            
-            {user.bio && (
-               <p className="max-w-md text-xs font-bold text-white/60 uppercase leading-relaxed tracking-widest italic">
-                  "{user.bio}"
-               </p>
-            )}
+          <div className="flex-1 text-center md:text-left">
+             <div className="flex flex-col md:flex-row md:items-center gap-4">
+                <h2 className="text-4xl font-black uppercase italic tracking-tighter text-white">
+                  {user.name}
+                </h2>
+                {user.verificationStatus === 'verified' && (
+                  <div className="inline-flex self-center md:self-auto items-center space-x-1.5 rounded-full border border-neon-cyan/20 bg-neon-cyan/5 px-3 py-1 shadow-[0_0_10px_rgba(0,255,255,0.05)]">
+                     <ShieldCheck className="h-3.5 w-3.5 text-neon-cyan" />
+                     <span className="text-[8px] font-black uppercase tracking-widest text-neon-cyan">Verified Operator</span>
+                  </div>
+                )}
+             </div>
+             <p className="text-neon-pink text-xs font-bold uppercase tracking-widest mt-1">@{user.username}</p>
+             {user.bio && <p className="mt-4 text-xs text-white/50 max-w-xl font-bold uppercase tracking-wider">{user.bio}</p>}
           </div>
 
-          <div className="grid grid-cols-2 gap-4 w-full md:w-auto self-end">
-             <ProfileStat label="Victories" value={user.stats.wins} color="pink" />
-             <ProfileStat label="Defeats" value={user.stats.losses} color="white" />
+          <div className="flex items-center space-x-6 bg-white/5 border border-white/5 rounded-2xl p-6 backdrop-blur-md">
+             <div className="text-center">
+                <span className="text-[6px] font-black uppercase tracking-widest text-white/30">ELITE RATING</span>
+                <p className="text-3xl font-black italic text-white tracking-tighter mt-1">{user.eloRating}</p>
+             </div>
+             <div className="h-8 w-px bg-white/10" />
+             <div className="text-center">
+                <span className="text-[6px] font-black uppercase tracking-widest text-white/30">SCORE MATRIX</span>
+                <p className="text-xl font-black italic text-white mt-1">
+                  W {user.stats.wins} <span className="text-white/25">/</span> L {user.stats.losses}
+                </p>
+             </div>
           </div>
         </div>
       </div>
-
-      <CombatAnalyst username={user.username} />
 
       {/* Sector Ratings */}
       {user.gameStats && user.gameStats.length > 0 && (
@@ -140,8 +187,8 @@ export default async function ProfilePage({ params }: { params: { username: stri
               </h3>
               <div className="space-y-4">
                  <RepStat label="Win Rate" value={`${Math.round((user.stats.wins / (user.stats.wins + user.stats.losses || 1)) * 100)}%`} />
-                 <RepStat label="DNF (Quits)" value={user.stats.dnfs} isBad />
-                 <RepStat label="Total Bouts" value={user.stats.wins + user.stats.losses + user.stats.draws} />
+                 <RepStat label="Disputes Unresolved" value={String(user.stats.dnfs || 0)} />
+                 <RepStat label="Verification Status" value={user.verificationStatus.toUpperCase()} />
               </div>
            </section>
 
@@ -153,11 +200,11 @@ export default async function ProfilePage({ params }: { params: { username: stri
                 </h3>
                 <div className="space-y-4">
                    {rivalries.map((r: any) => {
-                     const isP1 = r.player1Id._id.toString() === user._id.toString();
+                     const isP1 = r.player1Id._id.toString() === user.id.toString();
                      const rival = isP1 ? r.player2Id : r.player1Id;
                      const userWins = isP1 ? r.stats.player1Wins : r.stats.player2Wins;
                      const rivalWins = isP1 ? r.stats.player2Wins : r.stats.player1Wins;
-                     const hasBelt = r.beltHolderId?.toString() === user._id.toString();
+                     const hasBelt = r.beltHolderId?.toString() === user.id.toString();
 
                      return (
                        <div key={r._id.toString()} className="group rounded-xl border border-white/5 bg-white/5 p-4 transition-all hover:border-orange-500/30">
@@ -187,76 +234,68 @@ export default async function ProfilePage({ params }: { params: { username: stri
                 </div>
              </section>
            )}
-
-           <section className="rounded-2xl border border-white/5 bg-arcade-black/40 p-6">
-              <h3 className="text-sm font-black uppercase tracking-widest text-white/40 mb-6 flex items-center space-x-2">
-                 <Target className="h-4 w-4 text-neon-pink" />
-                 <span>Achievements</span>
-              </h3>
-              <div className="grid grid-cols-1 gap-3">
-                 {Object.values(ACHIEVEMENTS).map(a => {
-                   const isUnlocked = achievements.some((ua: any) => ua.achievementId === a.id);
-                   return (
-                     <AchievementBadge 
-                       key={a.id} 
-                       achievement={a} 
-                       isUnlocked={isUnlocked} 
-                     />
-                   );
-                 })}
-              </div>
-           </section>
         </div>
 
-        {/* Right Column: Fight History */}
-        <div className="lg:col-span-2">
-           <section className="rounded-2xl border border-white/5 bg-arcade-black/40 p-8 h-full">
-              <h3 className="text-sm font-black uppercase tracking-widest text-white/40 mb-8 flex items-center space-x-2">
-                 <Swords className="h-4 w-4 text-neon-pink" />
-                 <span>Fight History</span>
-              </h3>
+        {/* Right Column: Dynamic Combat Analyst & Match History */}
+        <div className="lg:col-span-2 space-y-8">
+           {/* Combat Analyst */}
+           <CombatAnalyst 
+             username={user.username}
+           />
+
+           {/* Match History */}
+           <section className="rounded-3xl border border-white/10 bg-white/5 p-8 backdrop-blur-xl">
+              <div className="flex items-center space-x-3 mb-8">
+                 <div className="rounded-lg bg-neon-cyan/10 p-2 text-neon-cyan border border-neon-cyan/20">
+                    <Swords className="h-5 w-5" />
+                 </div>
+                 <div>
+                    <h3 className="text-xl font-black uppercase italic text-white tracking-tighter">Combat Record</h3>
+                    <p className="text-[8px] font-bold text-white/20 uppercase tracking-widest">Recent verified confrontations</p>
+                 </div>
+              </div>
 
               {matchHistory.length > 0 ? (
                 <div className="space-y-4">
-                   {matchHistory.map((match: any) => {
-                     const isWinner = match.finalOutcome.winnerId.toString() === user._id.toString();
-                     const opponent = match.challengerId._id.toString() === user._id.toString() ? match.defenderId : match.challengerId;
-                     
-                     return (
-                       <div key={match._id.toString()} className="flex items-center justify-between rounded-xl bg-white/5 p-4 border border-white/5">
-                          <div className="flex items-center space-x-4">
-                             <div className={cn(
-                               "rounded-lg px-3 py-1 text-[8px] font-black uppercase italic tracking-widest",
-                               isWinner ? "bg-green-500/10 text-green-500 border border-green-500/20" : "bg-red-500/10 text-red-500 border border-red-500/20"
-                             )}>
-                               {isWinner ? 'Victory' : 'Defeat'}
-                             </div>
-                             <div>
-                                <p className="text-[10px] font-black text-white uppercase tracking-tight">vs {opponent.username}</p>
-                                <p className="text-[8px] font-bold text-white/20 uppercase tracking-widest">{match.gameId.title} • {match.finalOutcome.method}</p>
-                                {match.finalOutcome.commentary && (
-                                  <p className="mt-1 text-[7px] font-black italic uppercase tracking-tighter text-neon-pink opacity-60 line-clamp-1 group-hover:opacity-100 transition-opacity max-w-[200px]">
-                                    "{match.finalOutcome.commentary}"
-                                  </p>
-                                )}
-                             </div>
-                          </div>
-                          <div className="text-right">
-                             <p className="text-[10px] font-black text-white/40 uppercase italic tracking-tighter">
-                               R{match.finalOutcome.round} • {match.finalOutcome.time}
-                             </p>
-                             <p className="text-[8px] font-bold text-white/10 uppercase tracking-widest">
-                               {new Date(match.updatedAt).toLocaleDateString()}
-                             </p>
-                          </div>
-                       </div>
-                     );
-                   })}
+                  {matchHistory.map((m: any) => {
+                    const won = m.finalOutcome.winnerId._id.toString() === user.id.toString();
+                    const opponent = m.challengerId._id.toString() === user.id.toString() ? m.defenderId : m.challengerId;
+
+                    return (
+                      <Link 
+                        key={m._id} 
+                        href={`/matches/${m.id}`}
+                        className="group flex flex-col md:flex-row md:items-center justify-between p-4 rounded-2xl border border-white/5 bg-arcade-black/40 hover:border-white/10 transition-all gap-4"
+                      >
+                         <div className="flex items-center space-x-4">
+                            <div className={cn(
+                              "h-10 w-10 rounded-xl flex items-center justify-center text-xs font-black italic border",
+                              won ? "bg-neon-pink/10 text-neon-pink border-neon-pink/20 glow-pink" : "bg-white/5 text-white/20 border-white/10"
+                            )}>
+                              {won ? 'W' : 'L'}
+                            </div>
+                            <div>
+                               <p className="text-sm font-black uppercase tracking-tight text-white group-hover:text-neon-cyan transition-colors">
+                                 {won ? 'Defeated' : 'Lost to'} {opponent.username}
+                               </p>
+                               <p className="text-[8px] font-bold text-white/20 uppercase tracking-widest mt-0.5">
+                                 {m.gameId.title} • {m.finalOutcome.method}
+                               </p>
+                            </div>
+                         </div>
+                         <div className="text-left md:text-right">
+                            <span className="text-[8px] font-black text-white/20 uppercase tracking-widest block">Resolved</span>
+                            <span className="text-[10px] font-black text-white/50 uppercase tracking-widest block mt-0.5">
+                              {m.finalOutcome.resolvedAt ? new Date(m.finalOutcome.resolvedAt).toLocaleDateString() : 'N/A'}
+                            </span>
+                         </div>
+                      </Link>
+                    );
+                  })}
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center py-20 text-center opacity-20">
-                   <Swords className="h-12 w-12 mb-4" />
-                   <p className="text-[10px] font-black uppercase tracking-widest">No match data recorded</p>
+                <div className="rounded-2xl border border-dashed border-white/5 py-12 text-center">
+                   <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">No engagements recorded</p>
                 </div>
               )}
            </section>
@@ -266,84 +305,11 @@ export default async function ProfilePage({ params }: { params: { username: stri
   );
 }
 
-function AchievementBadge({ achievement, isUnlocked }: { achievement: any; isUnlocked: boolean }) {
-  const icons: any = {
-    Swords: Swords,
-    ShieldCheck: ShieldCheck,
-    Gavel: Gavel,
-    Trophy: Trophy,
-    Zap: Zap,
-  };
-  const Icon = icons[achievement.icon] || Trophy;
-
-  const colors: any = {
-    pink: "text-neon-pink bg-neon-pink/10 border-neon-pink/20 glow-pink",
-    cyan: "text-neon-cyan bg-neon-cyan/10 border-neon-cyan/20 glow-cyan",
-    purple: "text-neon-purple bg-neon-purple/10 border-neon-purple/20",
-    green: "text-green-500 bg-green-500/10 border-green-500/20",
-    yellow: "text-yellow-500 bg-yellow-500/10 border-yellow-500/20",
-  };
-
+function RepStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className={cn(
-      "flex items-center space-x-3 rounded-xl border p-3 transition-all",
-      isUnlocked ? `${colors[achievement.color]} bg-opacity-20 shadow-lg` : "bg-white/5 border-white/5 opacity-30 grayscale"
-    )}>
-       <div className={cn(
-         "rounded-lg p-2 border",
-         isUnlocked ? colors[achievement.color] : "bg-white/5 border-white/5"
-       )}>
-          <Icon className="h-4 w-4" />
-       </div>
-       <div className="flex-1 min-w-0">
-          <p className="text-[10px] font-black uppercase tracking-widest leading-none">{achievement.name}</p>
-          <p className="text-[7px] font-bold uppercase tracking-widest text-white/40 mt-1 line-clamp-1">{achievement.description}</p>
-       </div>
-       {!isUnlocked && (
-         <Zap className="h-3 w-3 text-white/10" />
-       )}
+    <div className="flex items-center justify-between border-b border-white/5 pb-3 last:border-0 last:pb-0">
+      <span className="text-[10px] font-black text-white/30 uppercase tracking-widest">{label}</span>
+      <span className="text-xs font-black italic text-white uppercase tracking-tight">{value}</span>
     </div>
   );
-}
-
-function Badge({ icon: Icon, label, color }: { icon: any; label: string; color: string }) {
-  const colors: any = {
-    cyan: "text-neon-cyan bg-neon-cyan/10 border-neon-cyan/20",
-    purple: "text-neon-purple bg-neon-purple/10 border-neon-purple/20",
-  };
-
-  return (
-    <div className={`inline-flex items-center space-x-2 rounded-full border px-3 py-1 ${colors[color]}`}>
-       <Icon className="h-3 w-3" />
-       <span className="text-[10px] font-black uppercase tracking-widest">{label}</span>
-    </div>
-  );
-}
-
-function ProfileStat({ label, value, color }: { label: string; value: any; color: string }) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-arcade-black/60 p-4 text-center min-w-[100px]">
-       <div className="text-[8px] font-black uppercase tracking-widest text-white/20 mb-1">{label}</div>
-       <div className={cn(
-         "text-2xl font-black italic uppercase tracking-tighter",
-         color === 'pink' ? "text-neon-pink" : "text-white"
-       )}>{value}</div>
-    </div>
-  );
-}
-
-function RepStat({ label, value, isBad }: { label: string; value: any; isBad?: boolean }) {
-  return (
-    <div className="flex items-center justify-between">
-       <span className="text-[10px] font-bold text-white/20 uppercase tracking-widest">{label}</span>
-       <span className={cn(
-         "text-[10px] font-black uppercase tracking-tighter",
-         isBad ? (value > 0 ? "text-red-500" : "text-white/40") : "text-white"
-       )}>{value}</span>
-    </div>
-  );
-}
-
-function cn(...inputs: any[]) {
-  return inputs.filter(Boolean).join(' ');
 }

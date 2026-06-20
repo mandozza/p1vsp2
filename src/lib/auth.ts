@@ -1,7 +1,8 @@
 import { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
-import dbConnect from '@/lib/db';
+import { db } from '@/lib/db';
 import { User } from '@/models/User';
+import { eq } from 'drizzle-orm';
 
 export const authOptions: NextAuthOptions = {
   session: {
@@ -16,25 +17,27 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         if (!credentials?.email) return null;
 
-        await dbConnect();
+        const email = credentials.email.toLowerCase();
         
         // In this prototype, we'll auto-create users if they don't exist
         // to simulate an easy "Insert Coin" onboarding flow.
-        let user = await User.findOne({ email: credentials.email.toLowerCase() });
+        let [user] = await db.select().from(User).where(eq(User.email, email));
 
         if (!user) {
-          const baseUsername = credentials.email.split('@')[0].slice(0, 15);
-          user = await User.create({
-            email: credentials.email.toLowerCase(),
+          const baseUsername = email.split('@')[0].slice(0, 15);
+          const [newUser] = await db.insert(User).values({
+            email,
             name: baseUsername,
             username: `${baseUsername}_${Math.floor(Math.random() * 1000)}`,
             role: 'member',
             creditBalance: 1000,
-          });
+            eloRating: 1000,
+          }).returning();
+          user = newUser;
         }
 
         return {
-          id: user._id.toString(),
+          id: String(user.id),
           name: user.name,
           email: user.email,
           role: user.role,

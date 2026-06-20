@@ -1,19 +1,33 @@
-import dbConnect from '@/lib/db';
+import { db } from '@/lib/db';
 import { Tournament } from '@/models/Tournament';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { Trophy, Swords, Calendar, Users, ChevronRight, Crown } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
+import { desc } from 'drizzle-orm';
 
 export default async function TournamentsPage() {
-  await dbConnect();
   const session = await getServerSession(authOptions);
 
-  const tournaments = await Tournament.find({})
-    .populate('gameId', 'title')
-    .sort({ createdAt: -1 })
-    .lean();
+  const rawTournaments = await db.query.tournaments.findMany({
+    orderBy: [desc(Tournament.createdAt)],
+    with: {
+      game: {
+        columns: {
+          title: true,
+        }
+      }
+    }
+  });
+
+  const formattedTournaments = rawTournaments.map((t: any) => ({
+    ...t,
+    _id: t.id,
+    id: t.id,
+    gameId: t.game ? { title: t.game.title } : { title: 'Unknown Game' },
+  }));
+
 
   return (
     <div className="container mx-auto px-4 py-12">
@@ -27,10 +41,10 @@ export default async function TournamentsPage() {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
-        {tournaments.map((t: any) => (
+        {formattedTournaments.map((t: any) => (
           <Link 
-            key={t._id.toString()}
-            href={`/tournaments/${t._id}`}
+            key={t._id}
+            href={`/tournaments/${t.id}`}
             className="group relative overflow-hidden rounded-3xl border border-white/5 bg-white/5 p-8 backdrop-blur-xl transition-all hover:border-neon-pink/30 hover:bg-white/10"
           >
             <div className="flex items-center justify-between mb-8">

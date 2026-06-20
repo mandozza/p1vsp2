@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { Joystick, Coins, User, Plus, Settings } from 'lucide-react';
 import { CreditModal } from '@/components/custom/CreditModal';
 import { NotificationCenter } from '@/components/layout/NotificationCenter';
@@ -66,10 +67,11 @@ export function Navbar() {
                   <Settings className="h-4 w-4" />
                 </Link>
                 <Link href={`/profile/${(session.user as any).username || session.user.id}`} className="flex items-center space-x-2 text-white/70 hover:text-white transition-colors">
-                <div className="h-8 w-8 rounded-full bg-accent flex items-center justify-center border border-white/20">
-                  <User className="h-4 w-4" />
-                </div>
-              </Link>
+                  <div className="h-8 w-8 rounded-full bg-accent flex items-center justify-center border border-white/20">
+                    <User className="h-4 w-4" />
+                  </div>
+                </Link>
+              </div>
             ) : (
               <Link 
                 href="/login" 

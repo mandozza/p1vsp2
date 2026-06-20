@@ -28,7 +28,7 @@ const predictionSchema = {
     },
   },
   required: ["predictedWinner", "confidence", "analysis", "challengerOdds", "defenderOdds"],
-};
+} as const;
 
 /**
  * Uses Gemini to predict a match outcome based on player data.
@@ -43,7 +43,7 @@ export async function predictMatchOutcome(matchData: {
       model: "gemini-1.5-flash",
       generationConfig: {
         responseMimeType: "application/json",
-        responseSchema: predictionSchema,
+        responseSchema: predictionSchema as any,
       },
     });
 

@@ -1,46 +1,46 @@
-import mongoose from 'mongoose';
+import { drizzle } from 'drizzle-orm/node-postgres';
+import { Pool } from 'pg';
+import * as schema from '@/models/schema';
 
-const MONGODB_URI = process.env.MONGODB_URI;
+const DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/p1vsp2';
 
-if (!MONGODB_URI) {
-  throw new Error('Please define the MONGODB_URI environment variable inside .env.local');
+if (!DATABASE_URL) {
+  throw new Error('Please define the DATABASE_URL environment variable inside .env.local');
 }
 
 /**
- * Global is used here to maintain a cached connection across hot reloads
- * in development. This prevents connections growing exponentially
- * during API Route usage.
+ * Cache the database connection in development to prevent connection leaks
  */
-let cached = (global as any).mongoose;
+let cached = (global as any).drizzle;
 
 if (!cached) {
-  cached = (global as any).mongoose = { conn: null, promise: null };
+  cached = (global as any).drizzle = { conn: null, pool: null };
 }
 
-async function dbConnect() {
+export function getDb() {
   if (cached.conn) {
     return cached.conn;
   }
 
-  if (!cached.promise) {
-    const opts = {
-      bufferCommands: false,
-    };
+  console.log('📡 Connecting to PostgreSQL database...');
+  const pool = new Pool({
+    connectionString: DATABASE_URL,
+    max: 10,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 2000,
+  });
 
-    console.log(`📡 Connecting to MongoDB at ${MONGODB_URI}`);
-    cached.promise = mongoose.connect(MONGODB_URI!, opts).then((mongoose) => {
-      return mongoose;
-    });
-  }
-
-  try {
-    cached.conn = await cached.promise;
-  } catch (e) {
-    cached.promise = null;
-    throw e;
-  }
-
+  cached.pool = pool;
+  cached.conn = drizzle(pool, { schema });
   return cached.conn;
 }
 
-export default dbConnect;
+export const db = getDb();
+export default getDb;
+
+// Export an async dbConnect helper for compatibility with database connection references
+export async function dbConnect() {
+  return db;
+}
+
+export { schema };

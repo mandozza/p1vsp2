@@ -43,7 +43,7 @@ export function VerificationSector({ user }: { user: any }) {
     try {
       // 1. Get upload URL
       const urlResult = await getProfileUploadUrl('verification', file.type);
-      if (!urlResult.success) throw new Error(urlResult.error);
+      if (!urlResult.success || !urlResult.data) throw new Error(urlResult.error || 'Failed to get upload URL');
 
       // 2. Upload to S3
       await fetch(urlResult.data.uploadUrl, {

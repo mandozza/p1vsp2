@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Package, Users, Joystick, Truck, TrendingUp, ChevronRight, FlaskConical, LayoutGrid } from 'lucide-react';
+import { Package, Users, Joystick, Truck, TrendingUp, ChevronRight, FlaskConical, LayoutGrid, Trophy } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const ADMIN_NAV = [

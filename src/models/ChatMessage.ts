@@ -1,21 +1,16 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
+import { z } from 'zod';
+import { chatMessages } from './schema';
 
-export interface IChatMessage extends Document {
-  userId: mongoose.Types.ObjectId;
-  message: string;
-  timestamp: Date;
+export const ChatMessageSchema = z.object({
+  userId: z.string(),
+  message: z.string().max(280),
+});
+
+export type IChatMessage = z.infer<typeof ChatMessageSchema> & {
+  id: string;
+  _id: string; // Maintain backward compatibility
   createdAt: Date;
-}
+};
 
-const ChatMessageSchema = new Schema<IChatMessage>(
-  {
-    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    message: { type: String, required: true, maxlength: 280 },
-  },
-  { timestamps: { createdAt: true, updatedAt: false } }
-);
-
-ChatMessageSchema.index({ createdAt: 1 });
-
-export const ChatMessage: Model<IChatMessage> =
-  mongoose.models.ChatMessage || mongoose.model<IChatMessage>('ChatMessage', ChatMessageSchema);
+export const ChatMessage = chatMessages;
+export default chatMessages;

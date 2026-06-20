@@ -1,6 +1,6 @@
 'use server';
 
-import dbConnect from '@/lib/db';
+import { db } from '@/lib/db';
 import { Tournament } from '@/models/Tournament';
 import { Match } from '@/models/Match';
 import { User } from '@/models/User';
@@ -11,6 +11,7 @@ import { ActionResult } from './credit.actions';
 import { createNotification } from './notification.actions';
 import { transferCredits } from '@/lib/economy';
 import { sendDiscordNotification } from '@/lib/discord';
+import { eq, inArray } from 'drizzle-orm';
 
 /**
  * Creates a new tournament.
@@ -19,15 +20,17 @@ export async function createTournament(data: { name: string; gameId: string; ent
   const session = await getServerSession(authOptions);
   if (!session?.user || session.user.role !== 'admin') throw new Error('Unauthorized');
 
-  await dbConnect();
-  const tournament = await Tournament.create({
-    ...data,
-    status: 'registration',
-    participants: [],
-    rounds: [],
-    entryFee: data.entryFee || 0,
-    prizePool: 0,
-  });
+  const [tournament] = await db.insert(Tournament)
+    .values({
+      name: data.name,
+      gameId: data.gameId,
+      status: 'registration',
+      participants: [],
+      rounds: [],
+      entryFee: data.entryFee || 0,
+      prizePool: 0,
+    })
+    .returning();
 
   await sendDiscordNotification({
     title: 'Tournament Initiated!',
@@ -40,7 +43,7 @@ export async function createTournament(data: { name: string; gameId: string; ent
 
   revalidatePath('/admin/tournaments');
   revalidatePath('/tournaments');
-  return { success: true, data: tournament._id };
+  return { success: true, data: tournament.id };
 }
 
 /**
@@ -50,14 +53,15 @@ export async function registerForTournament(tournamentId: string): Promise<Actio
   const session = await getServerSession(authOptions);
   if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-  await dbConnect();
-  const tournament = await Tournament.findById(tournamentId);
+  const [tournament] = await db.select().from(Tournament).where(eq(Tournament.id, tournamentId));
   if (!tournament) return { success: false, error: 'Tournament not found' };
   if (tournament.status !== 'registration') return { success: false, error: 'Registration is closed' };
 
-  if (tournament.participants.includes(session.user.id as any)) {
+  if (tournament.participants.includes(session.user.id)) {
     return { success: false, error: 'Already registered' };
   }
+
+  let finalPrizePool = tournament.prizePool;
 
   // 1. Collect Entry Fee
   if (tournament.entryFee > 0) {
@@ -65,16 +69,21 @@ export async function registerForTournament(tournamentId: string): Promise<Actio
       userId: session.user.id,
       amount: -tournament.entryFee,
       type: 'TOURNAMENT_FEE',
-      referenceId: tournament._id,
+      referenceId: tournament.id,
     });
     if (!fee.success) return { success: false, error: `Fee collection failed: ${fee.error}` };
     
     // Update Prize Pool
-    tournament.prizePool += tournament.entryFee;
+    finalPrizePool += tournament.entryFee;
   }
 
-  tournament.participants.push(session.user.id as any);
-  await tournament.save();
+  await db.update(Tournament)
+    .set({
+      participants: [...tournament.participants, session.user.id],
+      prizePool: finalPrizePool,
+      updatedAt: new Date()
+    })
+    .where(eq(Tournament.id, tournamentId));
 
   revalidatePath(`/tournaments/${tournamentId}`);
   return { success: true };
@@ -87,8 +96,7 @@ export async function startTournament(tournamentId: string): Promise<ActionResul
   const session = await getServerSession(authOptions);
   if (!session?.user || session.user.role !== 'admin') throw new Error('Unauthorized');
 
-  await dbConnect();
-  const tournament = await Tournament.findById(tournamentId);
+  const [tournament] = await db.select().from(Tournament).where(eq(Tournament.id, tournamentId));
   if (!tournament) return { success: false, error: 'Tournament not found' };
   if (tournament.participants.length < 2) return { success: false, error: 'Not enough participants' };
 
@@ -99,39 +107,45 @@ export async function startTournament(tournamentId: string): Promise<ActionResul
   const matches = [];
   for (let i = 0; i < players.length; i += 2) {
     if (players[i+1]) {
-      const match = await Match.create({
-        gameId: tournament.gameId,
-        challengerId: players[i],
-        defenderId: players[i+1],
-        status: 'accepted', // Auto-accept tournament matches
-        tournamentId: tournament._id,
-        tournamentRound: 1,
-      });
-      matches.push(match._id);
+      const [match] = await db.insert(Match)
+        .values({
+          gameId: tournament.gameId,
+          challengerId: players[i],
+          defenderId: players[i+1],
+          status: 'accepted', // Auto-accept tournament matches
+          tournamentId: tournament.id,
+          tournamentRound: 1,
+        })
+        .returning();
+      matches.push(match.id);
 
       // Notify players
       await Promise.all([
         createNotification({
-          userId: players[i].toString(),
+          userId: players[i],
           type: 'SYSTEM',
           title: 'Tournament Match Live!',
           message: `Your match in ${tournament.name} is ready. Go to the arena!`,
-          link: `/matches/${match._id}`,
+          link: `/matches/${match.id}`,
         }),
         createNotification({
-          userId: players[i+1].toString(),
+          userId: players[i+1],
           type: 'SYSTEM',
           title: 'Tournament Match Live!',
           message: `Your match in ${tournament.name} is ready. Go to the arena!`,
-          link: `/matches/${match._id}`,
+          link: `/matches/${match.id}`,
         })
       ]);
     }
   }
 
-  tournament.status = 'in_progress';
-  tournament.rounds = [{ roundNumber: 1, matches }];
-  await tournament.save();
+  await db.update(Tournament)
+    .set({
+      status: 'in_progress',
+      rounds: [{ roundNumber: 1, matches }],
+      updatedAt: new Date()
+    })
+    .where(eq(Tournament.id, tournamentId));
 
   revalidatePath(`/tournaments/${tournamentId}`);
   return { success: true };
@@ -142,39 +156,45 @@ export async function startTournament(tournamentId: string): Promise<ActionResul
  */
 export async function checkTournamentProgression(tournamentId: string) {
   try {
-    await dbConnect();
-    const tournament = await Tournament.findById(tournamentId).populate('rounds.matches');
+    const [tournament] = await db.select().from(Tournament).where(eq(Tournament.id, tournamentId));
     if (!tournament || tournament.status !== 'in_progress') return;
 
     const currentRoundIndex = tournament.rounds.length - 1;
     const currentRound = tournament.rounds[currentRoundIndex];
 
     // Check if all matches in current round are completed
-    const allMatches = await Match.find({ _id: { $in: currentRound.matches } });
-    const allFinished = allMatches.every(m => m.status === 'completed');
+    if (currentRound.matches.length === 0) return;
+    const allMatches = await db.select().from(Match).where(
+      inArray(Match.id, currentRound.matches)
+    );
+    const allFinished = allMatches.every((m: any) => m.status === 'completed');
 
     if (!allFinished) return;
 
     // Get winners
-    const winners = allMatches.map(m => m.finalOutcome.winnerId);
+    const winners = allMatches.map((m: any) => m.finalOutcome?.winnerId).filter(Boolean) as string[];
 
     if (winners.length === 1) {
       // TOURNAMENT COMPLETE
-      tournament.status = 'completed';
-      tournament.championId = winners[0] as any;
-      await tournament.save();
+      await db.update(Tournament)
+        .set({
+          status: 'completed',
+          championId: winners[0],
+          updatedAt: new Date()
+        })
+        .where(eq(Tournament.id, tournamentId));
       
       // Award Prize Pool
       if (tournament.prizePool > 0) {
         await transferCredits({
-          userId: winners[0]!.toString(),
+          userId: winners[0],
           amount: tournament.prizePool,
           type: 'TOURNAMENT_WIN',
-          referenceId: tournament._id,
+          referenceId: tournament.id,
         });
       }
 
-      const winner = await User.findById(winners[0]);
+      const [winner] = await db.select().from(User).where(eq(User.id, winners[0]));
 
       await sendDiscordNotification({
         title: 'GRAND CHAMPION CROWNED!',
@@ -186,36 +206,43 @@ export async function checkTournamentProgression(tournamentId: string) {
       });
 
       await createNotification({
-        userId: winners[0]!.toString(),
+        userId: winners[0],
         type: 'ACHIEVEMENT_UNLOCKED',
         title: 'TOURNAMENT CHAMPION!',
         message: `You won ${tournament.name}${tournament.prizePool > 0 ? ` and the prize pool of ${tournament.prizePool} credits!` : '!'}`,
         link: `/profile/${winner?.username}`,
       });
       
-    } else {
+    } else if (winners.length > 1) {
       // GENERATE NEXT ROUND
       const nextRoundNumber = currentRound.roundNumber + 1;
       const nextMatches = [];
       
       for (let i = 0; i < winners.length; i += 2) {
         if (winners[i+1]) {
-           const match = await Match.create({
-             gameId: tournament.gameId,
-             challengerId: winners[i],
-             defenderId: winners[i+1],
-             status: 'accepted',
-             tournamentId: tournament._id,
-             tournamentRound: nextRoundNumber,
-           });
-           nextMatches.push(match._id);
+           const [match] = await db.insert(Match)
+             .values({
+               gameId: tournament.gameId,
+               challengerId: winners[i],
+               defenderId: winners[i+1],
+               status: 'accepted',
+               tournamentId: tournament.id,
+               tournamentRound: nextRoundNumber,
+             })
+             .returning();
+           nextMatches.push(match.id);
         }
       }
 
-      tournament.rounds.push({ roundNumber: nextRoundNumber, matches: nextMatches as any });
-      await tournament.save();
+      await db.update(Tournament)
+        .set({
+          rounds: [...tournament.rounds, { roundNumber: nextRoundNumber, matches: nextMatches }],
+          updatedAt: new Date()
+        })
+        .where(eq(Tournament.id, tournamentId));
     }
   } catch (error) {
     console.error('Tournament Progression Error:', error);
   }
 }
+

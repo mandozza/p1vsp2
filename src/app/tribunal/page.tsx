@@ -1,21 +1,46 @@
-import dbConnect from '@/lib/db';
+import { db } from '@/lib/db';
 import { Match } from '@/models/Match';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { Gavel, AlertTriangle, Users, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { eq, desc } from 'drizzle-orm';
 
 export default async function TribunalPage() {
-  await dbConnect();
   const session = await getServerSession(authOptions);
 
-  const disputes = await Match.find({ status: 'disputed' })
-    .populate('challengerId', 'username')
-    .populate('defenderId', 'username')
-    .populate('gameId', 'title')
-    .sort({ createdAt: -1 })
-    .lean();
+  const rawDisputes = await db.query.matches.findMany({
+    where: eq(Match.status, 'disputed'),
+    orderBy: [desc(Match.createdAt)],
+    with: {
+      challenger: {
+        columns: {
+          username: true,
+        }
+      },
+      defender: {
+        columns: {
+          username: true,
+        }
+      },
+      game: {
+        columns: {
+          title: true,
+        }
+      }
+    }
+  });
+
+  const disputes = rawDisputes.map((m: any) => ({
+    ...m,
+    _id: m.id,
+    id: m.id,
+    challengerId: m.challenger ? { username: m.challenger.username } : { username: 'Unknown' },
+    defenderId: m.defender ? { username: m.defender.username } : { username: 'Unknown' },
+    gameId: m.game ? { title: m.game.title } : { title: 'Unknown Game' },
+  }));
+
 
   return (
     <div className="container mx-auto px-4 py-12">
@@ -32,8 +57,8 @@ export default async function TribunalPage() {
         <div className="grid gap-6 md:grid-cols-2">
           {disputes.map((match: any) => (
             <Link 
-              key={match._id.toString()}
-              href={`/tribunal/${match._id}`}
+              key={match.id}
+              href={`/tribunal/${match.id}`}
               className="group relative overflow-hidden rounded-3xl border border-white/5 bg-white/5 p-6 backdrop-blur-sm transition-all hover:border-neon-purple/30 hover:bg-white/10"
             >
               <div className="flex items-center justify-between mb-6">
@@ -77,7 +102,7 @@ export default async function TribunalPage() {
               <div className="grid grid-cols-2 gap-2 mb-4">
                 {match.results.map((res: any, i: number) => (
                   <div key={i} className="relative aspect-video rounded-xl overflow-hidden border border-white/5">
-                    <Image src={res.screenshotUrl} alt="Evidence" fill className="object-cover opacity-30" />
+                    <Image src={res.screenshotUrl} alt="Evidence" fill className="object-cover opacity-30 animate-fade-in" />
                   </div>
                 ))}
               </div>

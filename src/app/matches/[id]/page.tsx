@@ -1,39 +1,71 @@
-import dbConnect from '@/lib/db';
+import { db } from '@/lib/db';
 import { Match } from '@/models/Match';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { redirect, notFound } from 'next/navigation';
-import { Camera, Shield, User, Trophy, Swords, AlertCircle } from 'lucide-react';
+import { Camera, Shield, User, Trophy, Swords, AlertCircle, Coins, Zap } from 'lucide-react';
 import { ResultUploader } from '@/components/custom/ResultUploader';
 import { OraclePrediction } from '@/components/custom/OraclePrediction';
 import { SideBetForm } from '@/components/custom/SideBetForm';
 import { Bet } from '@/models/Bet';
 import Image from 'next/image';
+import Link from 'next/link';
+import { eq, and } from 'drizzle-orm';
 
 export default async function MatchDetailsPage({ params }: { params: { id: string } }) {
-  await dbConnect();
   const session = await getServerSession(authOptions);
   if (!session?.user) redirect('/login');
 
-  const match = await Match.findById(params.id)
-    .populate('challengerId', 'username stats eloRating')
-    .populate('defenderId', 'username stats eloRating')
-    .populate('gameId', 'title')
-    .lean();
+  const rawMatch = await db.query.matches.findFirst({
+    where: eq(Match.id, params.id),
+    with: {
+      challenger: {
+        columns: {
+          id: true,
+          username: true,
+          stats: true,
+          eloRating: true,
+        }
+      },
+      defender: {
+        columns: {
+          id: true,
+          username: true,
+          stats: true,
+          eloRating: true,
+        }
+      },
+      game: {
+        columns: {
+          title: true,
+        }
+      }
+    }
+  });
 
-  if (!match) notFound();
+  if (!rawMatch) notFound();
+
+  const match = {
+    ...rawMatch,
+    _id: rawMatch.id,
+    id: rawMatch.id,
+    challengerId: rawMatch.challenger ? { ...rawMatch.challenger, _id: rawMatch.challenger.id } : { _id: '', username: 'Unknown', stats: { wins: 0, losses: 0, draws: 0, dnfs: 0 }, eloRating: 1000 },
+    defenderId: rawMatch.defender ? { ...rawMatch.defender, _id: rawMatch.defender.id } : { _id: '', username: 'Unknown', stats: { wins: 0, losses: 0, draws: 0, dnfs: 0 }, eloRating: 1000 },
+    gameId: rawMatch.game ? { title: rawMatch.game.title } : { title: 'Unknown Game' },
+  };
 
   const isChallenger = match.challengerId._id.toString() === session.user.id;
   const isDefender = match.defenderId._id.toString() === session.user.id;
   
-  if (!isChallenger && !isDefender && session.user.role !== 'admin') {
-    // Non-participants can view but not resolve
-  }
-
   const userResult = match.results.find((r: any) => r.userId.toString() === session.user.id);
   const opponentResult = match.results.find((r: any) => r.userId.toString() !== session.user.id);
 
-  const existingBet = await Bet.findOne({ matchId: params.id, userId: session.user.id }).lean();
+  const [dbBet] = await db
+    .select()
+    .from(Bet)
+    .where(and(eq(Bet.matchId, params.id), eq(Bet.userId, session.user.id)));
+
+  const existingBet = dbBet ? { ...dbBet, _id: dbBet.id } : null;
 
   return (
     <div className="container mx-auto px-4 py-12 max-w-4xl">
@@ -83,7 +115,7 @@ export default async function MatchDetailsPage({ params }: { params: { id: strin
                            src={userResult.screenshotUrl} 
                            alt="Submission proof" 
                            fill 
-                           className="object-cover opacity-50 grayscale hover:opacity-100 hover:grayscale-0 transition-all cursor-zoom-in" 
+                           className="object-cover opacity-50 grayscale hover:opacity-100 hover:grayscale-0 transition-all cursor-zoom-in animate-fade-in" 
                          />
                          <div className="absolute inset-0 flex items-center justify-center bg-black/40">
                            <span className="text-[10px] font-black uppercase tracking-widest text-white">Your Submission</span>
@@ -99,7 +131,7 @@ export default async function MatchDetailsPage({ params }: { params: { id: strin
                          </p>
                        </div>
                        
-                       <ResultUploader matchId={match._id.toString()} />
+                       <ResultUploader matchId={match.id} />
                        
                        <div className="rounded-xl bg-yellow-500/5 border border-yellow-500/20 p-4 flex items-start space-x-3">
                          <AlertCircle className="h-5 w-5 text-yellow-500 shrink-0 mt-0.5" />
@@ -109,26 +141,26 @@ export default async function MatchDetailsPage({ params }: { params: { id: strin
                        </div>
                      </div>
                    ) : (
-                      <div className="flex flex-col items-center justify-center h-full text-center py-12">
-                         <Swords className="h-12 w-12 text-white/10 mb-4" />
-                         <h3 className="text-xl font-black uppercase tracking-tighter text-white italic">Arena in Progress</h3>
-                         <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest mt-2 max-w-xs">
-                           The combatants are in the arena. Watch the live ticker for the resolution.
-                         </p>
-                      </div>
-                   )}
+                       <div className="flex flex-col items-center justify-center h-full text-center py-12">
+                          <Swords className="h-12 w-12 text-white/10 mb-4" />
+                          <h3 className="text-xl font-black uppercase tracking-tighter text-white italic">Arena in Progress</h3>
+                          <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest mt-2 max-w-xs">
+                            The combatants are in the arena. Watch the live ticker for the resolution.
+                          </p>
+                       </div>
+                    )}
                 </div>
              </div>
              
              <div>
                 {!existingBet && !isChallenger && !isDefender ? (
-                  <SideBetForm 
-                    matchId={match._id.toString()} 
-                    challenger={{ id: match.challengerId._id.toString(), username: match.challengerId.username }}
-                    defender={{ id: match.defenderId._id.toString(), username: match.defenderId.username }}
-                  />
+                   <SideBetForm 
+                     matchId={match.id} 
+                     challenger={{ id: match.challengerId._id.toString(), username: match.challengerId.username }}
+                     defender={{ id: match.defenderId._id.toString(), username: match.defenderId.username }}
+                   />
                 ) : existingBet ? (
-                   <div className="rounded-3xl border border-neon-cyan/20 bg-neon-cyan/5 p-8 text-center h-full flex flex-col items-center justify-center backdrop-blur-xl">
+                   <div className="rounded-3xl border border-neon-cyan/20 bg-neon-cyan/5 p-8 text-center h-full flex flex-col items-center justify-center backdrop-blur-xl animate-scale-up">
                       <div className="rounded-2xl bg-neon-cyan/10 p-4 mb-4 border border-neon-cyan/20">
                          <Coins className="h-8 w-8 text-neon-cyan" />
                       </div>
@@ -163,26 +195,26 @@ export default async function MatchDetailsPage({ params }: { params: { id: strin
              
              {match.finalOutcome?.commentary && (
                <div className="mb-8 relative">
-                 <div className="absolute -top-4 -left-2 text-4xl text-white/5 font-serif italic">"</div>
+                 <div className="absolute -top-4 -left-2 text-4xl text-white/5 font-serif italic">&ldquo;</div>
                  <h2 className="text-3xl font-black italic uppercase tracking-tighter text-white text-glow-pink px-6">
                    {match.finalOutcome.commentary}
                  </h2>
-                 <div className="absolute -bottom-4 -right-2 text-4xl text-white/5 font-serif italic">"</div>
+                 <div className="absolute -bottom-4 -right-2 text-4xl text-white/5 font-serif italic">&rdquo;</div>
                </div>
              )}
 
-             <div className="flex flex-col items-center space-y-4">
-                <div className="flex items-center space-x-2 rounded-full bg-white/5 px-4 py-1.5 border border-white/10">
-                   <Shield className="h-3 w-3 text-white/40" />
-                   <span className="text-[10px] font-black uppercase tracking-widest text-white/60">
-                     Verified by {match.finalOutcome?.resolvedBy?.toUpperCase()} Oracle
-                   </span>
-                </div>
-                
-                <Link href="/matches" className="text-neon-cyan text-[10px] font-black uppercase tracking-widest hover:underline">
-                  Back to Match Center
-                </Link>
-             </div>
+              <div className="flex flex-col items-center space-y-4">
+                 <div className="flex items-center space-x-2 rounded-full bg-white/5 px-4 py-1.5 border border-white/10">
+                    <Shield className="h-3 w-3 text-white/40" />
+                    <span className="text-[10px] font-black uppercase tracking-widest text-white/60">
+                      Verified by {match.finalOutcome?.resolvedBy?.toUpperCase()} Oracle
+                    </span>
+                 </div>
+                 
+                 <Link href="/matches" className="text-neon-cyan text-[10px] font-black uppercase tracking-widest hover:underline">
+                   Back to Match Center
+                 </Link>
+              </div>
           </div>
         )}
       </div>
@@ -213,4 +245,8 @@ function PlayerProfile({ player, label }: { player: any; label: string }) {
       </div>
     </div>
   );
+}
+
+function cn(...inputs: any[]) {
+  return inputs.filter(Boolean).join(' ');
 }

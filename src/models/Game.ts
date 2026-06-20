@@ -1,5 +1,5 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
 import { z } from 'zod';
+import { games } from './schema';
 
 export const GameSchema = z.object({
   title: z.string().min(1).max(100),
@@ -11,28 +11,11 @@ export const GameSchema = z.object({
 });
 
 export type IGame = z.infer<typeof GameSchema> & {
-  _id: string;
+  id: string;
+  _id: string; // Maintain backward compatibility
   createdAt: Date;
   updatedAt: Date;
 };
 
-export interface IGameDocument extends Omit<IGame, '_id'>, Document {}
-
-const GameMongooseSchema = new Schema<IGameDocument>(
-  {
-    title: { type: String, required: true },
-    slug: { type: String, required: true, unique: true },
-    active: { type: Boolean, required: true, default: true },
-    thumbnailUrl: { type: String },
-    aiPrompt: { type: String },
-    gameType: { 
-      type: String, 
-      enum: ['FIGHTING', 'SPORTS', 'RACING', 'SHOOTER'], 
-      default: 'FIGHTING' 
-    },
-  },
-  { timestamps: true }
-);
-
-export const Game: Model<IGameDocument> =
-  mongoose.models.Game || mongoose.model<IGameDocument>('Game', GameMongooseSchema);
+export const Game = games;
+export default games;

@@ -1,4 +1,4 @@
-import dbConnect from '@/lib/db';
+import { db } from '@/lib/db';
 import { Match } from '@/models/Match';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -7,18 +7,48 @@ import { Gavel, Shield, Info, Users, ExternalLink, Video } from 'lucide-react';
 import Image from 'next/image';
 import { TribunalVoteForm } from '@/components/custom/TribunalVoteForm';
 import { VideoEmbed } from '@/components/custom/VideoEmbed';
+import { eq } from 'drizzle-orm';
 
 export default async function DisputeDetailsPage({ params }: { params: { id: string } }) {
-  await dbConnect();
   const session = await getServerSession(authOptions);
 
-  const match = await Match.findById(params.id)
-    .populate('challengerId', 'username stats eloRating')
-    .populate('defenderId', 'username stats eloRating')
-    .populate('gameId', 'title')
-    .lean();
+  const rawMatch = await db.query.matches.findFirst({
+    where: eq(Match.id, params.id),
+    with: {
+      challenger: {
+        columns: {
+          id: true,
+          username: true,
+          stats: true,
+          eloRating: true,
+        }
+      },
+      defender: {
+        columns: {
+          id: true,
+          username: true,
+          stats: true,
+          eloRating: true,
+        }
+      },
+      game: {
+        columns: {
+          title: true,
+        }
+      }
+    }
+  });
 
-  if (!match || match.status !== 'disputed') notFound();
+  if (!rawMatch || rawMatch.status !== 'disputed') notFound();
+
+  const match = {
+    ...rawMatch,
+    _id: rawMatch.id,
+    id: rawMatch.id,
+    challengerId: rawMatch.challenger ? { ...rawMatch.challenger, _id: rawMatch.challenger.id } : { _id: '', username: 'Unknown', stats: { wins: 0, losses: 0, draws: 0, dnfs: 0 }, eloRating: 1000 },
+    defenderId: rawMatch.defender ? { ...rawMatch.defender, _id: rawMatch.defender.id } : { _id: '', username: 'Unknown', stats: { wins: 0, losses: 0, draws: 0, dnfs: 0 }, eloRating: 1000 },
+    gameId: rawMatch.game ? { title: rawMatch.game.title } : { title: 'Unknown Game' },
+  };
 
   // Calculate current vote tally
   const challengerVotes = match.votes.filter((v: any) => v.votedForId.toString() === match.challengerId._id.toString()).length;
@@ -33,7 +63,7 @@ export default async function DisputeDetailsPage({ params }: { params: { id: str
         <div>
           <div className="inline-flex items-center space-x-2 rounded-full border border-neon-purple/20 bg-neon-purple/5 px-4 py-1.5 mb-4">
             <Gavel className="h-4 w-4 text-neon-purple" />
-            <span className="text-xs font-black uppercase tracking-widest text-neon-purple">Tribunal Case #{match._id.toString().slice(-6)}</span>
+            <span className="text-xs font-black uppercase tracking-widest text-neon-purple">Tribunal Case #{match.id.slice(-6)}</span>
           </div>
           <h1 className="text-4xl font-black italic uppercase tracking-tighter text-white text-glow-pink">
             Review <span className="text-neon-pink">Evidence</span>
@@ -112,15 +142,15 @@ export default async function DisputeDetailsPage({ params }: { params: { id: str
           <div className="rounded-3xl border border-neon-purple/20 bg-neon-purple/5 p-8 text-center backdrop-blur-xl">
              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-neon-purple/20 text-neon-purple border border-neon-purple/30">
                <Users className="h-6 w-6" />
-             </div>
-             <h3 className="text-xl font-black uppercase tracking-tighter text-white italic">Vote Recorded</h3>
-             <p className="text-[10px] font-bold uppercase tracking-widest text-white/30 mt-1">
-               You voted for <span className="text-neon-purple">{(match as any)[userVote.votedForId.toString() === match.challengerId._id.toString() ? 'challengerId' : 'defenderId'].username}</span>
-             </p>
+              </div>
+              <h3 className="text-xl font-black uppercase tracking-tighter text-white italic">Vote Recorded</h3>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-white/30 mt-1">
+                You voted for <span className="text-neon-purple">{(match as any)[userVote.votedForId.toString() === match.challengerId._id.toString() ? 'challengerId' : 'defenderId'].username}</span>
+              </p>
           </div>
         ) : (
           <TribunalVoteForm 
-            matchId={match._id.toString()} 
+            matchId={match.id} 
             challengerId={match.challengerId._id.toString()}
             defenderId={match.defenderId._id.toString()}
             challengerName={match.challengerId.username}

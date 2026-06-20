@@ -1,17 +1,17 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
+import { z } from 'zod';
+import { appSettings } from './schema';
 
-export interface IAppSettings extends Document {
-  key: string;
-  value: any;
-}
+export const AppSettingsSchema = z.object({
+  key: z.string().min(1),
+  value: z.any(),
+});
 
-const AppSettingsSchema = new Schema<IAppSettings>(
-  {
-    key: { type: String, required: true, unique: true },
-    value: { type: Schema.Types.Mixed, required: true },
-  },
-  { timestamps: true }
-);
+export type IAppSettings = z.infer<typeof AppSettingsSchema> & {
+  id: string;
+  _id: string; // Maintain backward compatibility
+  createdAt: Date;
+  updatedAt: Date;
+};
 
-export const AppSettings: Model<IAppSettings> =
-  mongoose.models.AppSettings || mongoose.model<IAppSettings>('AppSettings', AppSettingsSchema);
+export const AppSettings = appSettings;
+export default appSettings;

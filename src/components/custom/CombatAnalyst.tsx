@@ -13,7 +13,7 @@ export function CombatAnalyst({ username }: { username: string }) {
     setLoading(true);
     const result = await analyzeCombatStyle(username);
     if (result.success) {
-      setReport(result.data);
+      setReport(result.data || null);
     } else {
       alert(result.error);
     }

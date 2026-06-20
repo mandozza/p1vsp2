@@ -5,6 +5,7 @@ import { Camera, Upload, Loader2, CheckCircle2, Video } from 'lucide-react';
 import { getResultUploadUrl, submitMatchResult } from '@/actions/match.actions';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+import { cn } from '@/lib/utils';
 
 export function ResultUploader({ matchId }: { matchId: string }) {
   const router = useRouter();

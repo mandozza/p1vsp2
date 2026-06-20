@@ -1,7 +1,6 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import mongoose from 'mongoose';
-import dbConnect from '@/lib/db';
+import { Client } from 'pg';
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -9,45 +8,68 @@ export async function GET() {
 
   const userId = session.user.id;
   const encoder = new TextEncoder();
+  const connectionString = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/p1vsp2';
+
+  const pgClient = new Client({ connectionString });
 
   const stream = new ReadableStream({
     async start(controller) {
-      await dbConnect();
-      const db = mongoose.connection.db;
-      if (!db) {
+      try {
+        await pgClient.connect();
+        
+        // 1. Initial success message
+        controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'CONNECTED' })}\n\n`));
+
+        // 2. Watch for new notifications for this specific user
+        await pgClient.query('LISTEN notifications_change');
+
+        pgClient.on('notification', (msg) => {
+          if (msg.channel === 'notifications_change' && msg.payload) {
+            try {
+              const change = JSON.parse(msg.payload);
+              if (change.operationType === 'insert' && change.fullDocument) {
+                const doc = change.fullDocument;
+                
+                // Only send to the correct user
+                if (String(doc.user_id) === String(userId)) {
+                  // Map database fields to the expected frontend contract
+                  const payloadData = {
+                    _id: String(doc.id),
+                    id: String(doc.id),
+                    userId: String(doc.user_id),
+                    type: doc.type,
+                    title: doc.title,
+                    message: doc.message,
+                    link: doc.link || undefined,
+                    isRead: doc.is_read,
+                    createdAt: doc.created_at,
+                  };
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify(payloadData)}\n\n`));
+                }
+              }
+            } catch (e) {
+              console.error('Failed to parse notifications change:', e);
+            }
+          }
+        });
+
+      } catch (error) {
+        console.error('Failed to connect PG notifier client:', error);
         controller.close();
-        return;
       }
-
-      // 1. Initial success message
-      controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'CONNECTED' })}\n\n`));
-
-      // 2. Watch for new notifications for this specific user
-      const collection = db.collection('notifications');
-      const changeStream = collection.watch([
-        { 
-          $match: { 
-            operationType: 'insert',
-            'fullDocument.userId': new mongoose.Types.ObjectId(userId)
-          } 
-        }
-      ], { fullDocument: 'updateLookup' });
-
-      changeStream.on('change', (change: any) => {
-        if (change.fullDocument) {
-          const data = JSON.stringify(change.fullDocument);
-          controller.enqueue(encoder.encode(`data: ${data}\n\n`));
-        }
-      });
 
       // 3. Heartbeat
       const heartbeat = setInterval(() => {
-        controller.enqueue(encoder.encode(': heartbeat\n\n'));
+        try {
+          controller.enqueue(encoder.encode(': heartbeat\n\n'));
+        } catch (e) {
+          // Stream might be closed already
+        }
       }, 25000);
 
       // 4. Cleanup
       return () => {
-        changeStream.close();
+        pgClient.end().catch((err) => console.error('Error closing notifications stream pgClient:', err));
         clearInterval(heartbeat);
       };
     },

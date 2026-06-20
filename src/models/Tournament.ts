@@ -1,43 +1,28 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
+import { z } from 'zod';
+import { tournaments } from './schema';
 
-export interface ITournament extends Document {
-  name: string;
-  gameId: mongoose.Types.ObjectId;
-  status: 'registration' | 'in_progress' | 'completed';
-  participants: mongoose.Types.ObjectId[];
-  rounds: {
-    roundNumber: number;
-    matches: mongoose.Types.ObjectId[];
-  }[];
-  championId?: mongoose.Types.ObjectId;
-  entryFee: number;
-  prizePool: number;
+export const TournamentSchema = z.object({
+  name: z.string().min(1),
+  gameId: z.string(),
+  status: z.enum(['registration', 'in_progress', 'completed']).default('registration'),
+  participants: z.array(z.string()).default([]),
+  rounds: z.array(
+    z.object({
+      roundNumber: z.number(),
+      matches: z.array(z.string()),
+    })
+  ).default([]),
+  championId: z.string().optional(),
+  entryFee: z.number().int().nonnegative().default(0),
+  prizePool: z.number().int().nonnegative().default(0),
+});
+
+export type ITournament = z.infer<typeof TournamentSchema> & {
+  id: string;
+  _id: string; // Maintain backward compatibility
   createdAt: Date;
   updatedAt: Date;
-}
+};
 
-const TournamentSchema = new Schema<ITournament>(
-  {
-    name: { type: String, required: true },
-    gameId: { type: Schema.Types.ObjectId, ref: 'Game', required: true },
-    status: { 
-      type: String, 
-      enum: ['registration', 'in_progress', 'completed'], 
-      default: 'registration' 
-    },
-    participants: [{ type: Schema.Types.ObjectId, ref: 'User' }],
-    rounds: [
-      {
-        roundNumber: { type: Number, required: true },
-        matches: [{ type: Schema.Types.ObjectId, ref: 'Match' }],
-      }
-    ],
-    championId: { type: Schema.Types.ObjectId, ref: 'User' },
-    entryFee: { type: Number, default: 0 },
-    prizePool: { type: Number, default: 0 },
-  },
-  { timestamps: true }
-);
-
-export const Tournament: Model<ITournament> =
-  mongoose.models.Tournament || mongoose.model<ITournament>('Tournament', TournamentSchema);
+export const Tournament = tournaments;
+export default tournaments;

@@ -1,12 +1,13 @@
 'use server';
 
-import dbConnect from '@/lib/db';
+import { db } from '@/lib/db';
 import { Notification } from '@/models/Notification';
 import { User } from '@/models/User';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
 import { sendWebPush } from '@/lib/push';
+import { eq, and, desc } from 'drizzle-orm';
 
 /**
  * Creates a new personal notification.
@@ -19,11 +20,19 @@ export async function createNotification(data: {
   link?: string;
 }) {
   try {
-    await dbConnect();
-    const notification = await Notification.create(data);
+    const [notification] = await db.insert(Notification)
+      .values({
+        userId: data.userId,
+        type: data.type,
+        title: data.title,
+        message: data.message,
+        link: data.link,
+        isRead: false,
+      })
+      .returning();
 
     // 1. Check for Web Push Subscription
-    const user = await User.findById(data.userId).select('pushSubscription');
+    const [user] = await db.select({ pushSubscription: User.pushSubscription }).from(User).where(eq(User.id, data.userId));
     if (user?.pushSubscription) {
       const result = await sendWebPush(user.pushSubscription, {
         title: data.title,
@@ -33,12 +42,13 @@ export async function createNotification(data: {
 
       // Cleanup if expired
       if (result?.expired) {
-        user.pushSubscription = undefined;
-        await user.save();
+        await db.update(User)
+          .set({ pushSubscription: null, updatedAt: new Date() })
+          .where(eq(User.id, data.userId));
       }
     }
 
-    return { success: true, id: notification._id };
+    return { success: true, id: notification.id };
   } catch (error) {
     console.error('Failed to create notification:', error);
     return { success: false };
@@ -50,14 +60,19 @@ export async function createNotification(data: {
  */
 export async function getMyNotifications(limit = 20) {
   try {
-    await dbConnect();
     const session = await getServerSession(authOptions);
     if (!session?.user) return [];
 
-    return await Notification.find({ userId: session.user.id })
-      .sort({ createdAt: -1 })
-      .limit(limit)
-      .lean();
+    const rawNotifications = await db.select().from(Notification)
+      .where(eq(Notification.userId, session.user.id))
+      .orderBy(desc(Notification.createdAt))
+      .limit(limit);
+
+    // Map _id to id for backwards compatibility
+    return rawNotifications.map((n: any) => ({
+      ...n,
+      _id: n.id,
+    }));
   } catch (error) {
     console.error('Failed to fetch notifications:', error);
     return [];
@@ -69,14 +84,12 @@ export async function getMyNotifications(limit = 20) {
  */
 export async function markAsRead(notificationId: string) {
   try {
-    await dbConnect();
     const session = await getServerSession(authOptions);
     if (!session?.user) return { success: false };
 
-    await Notification.findOneAndUpdate(
-      { _id: notificationId, userId: session.user.id },
-      { isRead: true }
-    );
+    await db.update(Notification)
+      .set({ isRead: true, updatedAt: new Date() })
+      .where(and(eq(Notification.id, notificationId), eq(Notification.userId, session.user.id)));
 
     revalidatePath('/');
     return { success: true };
@@ -91,14 +104,12 @@ export async function markAsRead(notificationId: string) {
  */
 export async function markAllAsRead() {
   try {
-    await dbConnect();
     const session = await getServerSession(authOptions);
     if (!session?.user) return { success: false };
 
-    await Notification.updateMany(
-      { userId: session.user.id, isRead: false },
-      { isRead: true }
-    );
+    await db.update(Notification)
+      .set({ isRead: true, updatedAt: new Date() })
+      .where(and(eq(Notification.userId, session.user.id), eq(Notification.isRead, false)));
 
     revalidatePath('/');
     return { success: true };
@@ -107,3 +118,4 @@ export async function markAllAsRead() {
     return { success: false };
   }
 }
+

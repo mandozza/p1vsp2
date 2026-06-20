@@ -1,5 +1,5 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
 import { z } from 'zod';
+import { matches } from './schema';
 
 export const MatchResultSchema = z.object({
   userId: z.string(),
@@ -36,6 +36,7 @@ export const MatchSchema = z.object({
     round: z.number().optional(),
     time: z.string().optional(),
     isDNF: z.boolean().default(false),
+    commentary: z.string().optional(),
     resolvedAt: z.date().optional(),
     resolvedBy: z.enum(['ai', 'admin', 'community']).optional(),
   }).optional(),
@@ -59,76 +60,11 @@ export const MatchSchema = z.object({
 });
 
 export type IMatch = z.infer<typeof MatchSchema> & {
-  _id: string;
+  id: string;
+  _id: string; // Maintain backward compatibility
   createdAt: Date;
   updatedAt: Date;
 };
 
-export interface IMatchDocument extends Omit<IMatch, '_id'>, Document {}
-
-const MatchMongooseSchema = new Schema<IMatchDocument>(
-  {
-    gameId: { type: Schema.Types.ObjectId, ref: 'Game', required: true },
-    challengerId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    defenderId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    status: { 
-      type: String, 
-      enum: ['pending', 'accepted', 'awaiting_results', 'verifying', 'completed', 'disputed', 'cancelled'],
-      default: 'pending' 
-    },
-    results: [
-      {
-        userId: { type: Schema.Types.ObjectId, ref: 'User' },
-        screenshotUrl: { type: String },
-        videoUrl: { type: String },
-        aiExtractedData: {
-          winnerTag: String,
-          loserTag: String,
-          method: String,
-          round: Number,
-          time: String,
-          opponentQuit: Boolean,
-        },
-        submittedAt: { type: Date, default: Date.now },
-      }
-    ],
-    finalOutcome: {
-      winnerId: { type: Schema.Types.ObjectId, ref: 'User' },
-      method: String,
-      round: Number,
-      time: String,
-      isDNF: { type: Boolean, default: false },
-      commentary: String,
-      resolvedAt: Date,
-      resolvedBy: { type: String, enum: ['ai', 'admin', 'community'] },
-      },
-    votes: [
-      {
-        userId: { type: Schema.Types.ObjectId, ref: 'User' },
-        votedForId: { type: Schema.Types.ObjectId, ref: 'User' },
-        createdAt: { type: Date, default: Date.now },
-      }
-    ],
-    tournamentId: { type: Schema.Types.ObjectId, ref: 'Tournament' },
-    tournamentRound: { type: Number },
-    wagerAmount: { type: Number, default: 0 },
-    prediction: {
-      predictedWinnerId: { type: Schema.Types.ObjectId, ref: 'User' },
-      confidence: Number,
-      analysis: String,
-      odds: {
-        challenger: { type: Number, default: 2.0 },
-        defender: { type: Number, default: 2.0 },
-      },
-    },
-  },
-  { timestamps: true }
-);
-
-// Indexes for common queries
-MatchMongooseSchema.index({ challengerId: 1, status: 1 });
-MatchMongooseSchema.index({ defenderId: 1, status: 1 });
-MatchMongooseSchema.index({ status: 1 });
-
-export const Match: Model<IMatchDocument> =
-  mongoose.models.Match || mongoose.model<IMatchDocument>('Match', MatchMongooseSchema);
+export const Match = matches;
+export default matches;

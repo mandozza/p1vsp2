@@ -1,35 +1,23 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
+import { z } from 'zod';
+import { notifications } from './schema';
 
 export type NotificationType = 'CHALLENGE_RECEIVED' | 'MATCH_RESOLVED' | 'ACHIEVEMENT_UNLOCKED' | 'SYSTEM';
 
-export interface INotification extends Document {
-  userId: mongoose.Types.ObjectId;
-  type: NotificationType;
-  title: string;
-  message: string;
-  link?: string;
-  isRead: boolean;
+export const NotificationSchema = z.object({
+  userId: z.string(),
+  type: z.enum(['CHALLENGE_RECEIVED', 'MATCH_RESOLVED', 'ACHIEVEMENT_UNLOCKED', 'SYSTEM']),
+  title: z.string().min(1),
+  message: z.string().min(1),
+  link: z.string().url().optional(),
+  isRead: z.boolean().default(false),
+});
+
+export type INotification = z.infer<typeof NotificationSchema> & {
+  id: string;
+  _id: string; // Maintain backward compatibility
   createdAt: Date;
-}
+  updatedAt: Date;
+};
 
-const NotificationSchema = new Schema<INotification>(
-  {
-    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    type: { 
-      type: String, 
-      enum: ['CHALLENGE_RECEIVED', 'MATCH_RESOLVED', 'ACHIEVEMENT_UNLOCKED', 'SYSTEM'],
-      required: true 
-    },
-    title: { type: String, required: true },
-    message: { type: String, required: true },
-    link: { type: String },
-    isRead: { type: Boolean, default: false },
-  },
-  { timestamps: true }
-);
-
-NotificationSchema.index({ userId: 1, createdAt: -1 });
-NotificationSchema.index({ userId: 1, isRead: 1 });
-
-export const Notification: Model<INotification> =
-  mongoose.models.Notification || mongoose.model<INotification>('Notification', NotificationSchema);
+export const Notification = notifications;
+export default notifications;

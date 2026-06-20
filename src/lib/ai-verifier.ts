@@ -31,7 +31,7 @@ const genericSchema = {
     },
   },
   required: ["winnerTag", "loserTag", "opponentQuit"],
-};
+} as const;
 
 /**
  * Specialized Schema for Fighting Games
@@ -48,7 +48,7 @@ const fightingSchema = {
     opponentQuit: { type: SchemaType.BOOLEAN },
   },
   required: ["winnerTag", "loserTag", "method", "opponentQuit"],
-};
+} as const;
 
 /**
  * Extraction Schema for Profile Screenshots
@@ -67,7 +67,7 @@ const profileSchema = {
     },
   },
   required: ["gamerTag", "bioCode"],
-};
+} as const;
 
 /**
  * Uses Gemini to extract match data from a screenshot.
@@ -85,7 +85,7 @@ export async function extractMatchData(imageUrl: string, customPrompt?: string, 
       model: "gemini-1.5-flash",
       generationConfig: {
         responseMimeType: "application/json",
-        responseSchema: schema,
+        responseSchema: schema as any,
       },
     });
 
@@ -126,7 +126,7 @@ export async function verifyProfileScreenshot(imageUrl: string) {
       model: "gemini-1.5-flash",
       generationConfig: {
         responseMimeType: "application/json",
-        responseSchema: profileSchema,
+        responseSchema: profileSchema as any,
       },
     });
 

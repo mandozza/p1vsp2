@@ -1,35 +1,55 @@
-import dbConnect from '@/lib/db';
+import { db } from '@/lib/db';
 import { Match } from '@/models/Match';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { redirect } from 'next/navigation';
-import { Swords, Clock, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Swords, Clock, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
 import { MatchCard } from '@/components/custom/MatchCard';
+import { or, eq, desc } from 'drizzle-orm';
 
 export default async function MatchesPage() {
-  await dbConnect();
   const session = await getServerSession(authOptions);
   
   if (!session?.user) {
     redirect('/login');
   }
 
-  const matches = await Match.find({
-    $or: [
-      { challengerId: session.user.id },
-      { defenderId: session.user.id }
-    ]
-  })
-  .populate('challengerId', 'username')
-  .populate('defenderId', 'username')
-  .populate('gameId', 'title')
-  .sort({ updatedAt: -1 })
-  .lean();
+  const rawMatches = await db.query.matches.findMany({
+    where: or(eq(Match.challengerId, session.user.id), eq(Match.defenderId, session.user.id)),
+    orderBy: [desc(Match.updatedAt)],
+    with: {
+      challenger: {
+        columns: {
+          username: true,
+        }
+      },
+      defender: {
+        columns: {
+          username: true,
+        }
+      },
+      game: {
+        columns: {
+          title: true,
+        }
+      }
+    }
+  });
 
-  const pending = matches.filter(m => m.status === 'pending');
-  const active = matches.filter(m => ['accepted', 'awaiting_results', 'verifying'].includes(m.status));
-  const completed = matches.filter(m => ['completed', 'disputed'].includes(m.status));
+  const matches = rawMatches.map((m: any) => ({
+    ...m,
+    _id: m.id,
+    id: m.id,
+    challengerId: m.challenger ? { ...m.challenger, _id: m.challengerId } : { _id: '', username: 'Unknown' },
+    defenderId: m.defender ? { ...m.defender, _id: m.defenderId } : { _id: '', username: 'Unknown' },
+    gameId: m.game ? { ...m.game, _id: m.gameId } : { _id: '', title: 'Unknown Game' },
+  }));
+
+  const pending = matches.filter((m: any) => m.status === 'pending');
+  const active = matches.filter((m: any) => ['accepted', 'awaiting_results', 'verifying'].includes(m.status));
+  const completed = matches.filter((m: any) => ['completed', 'disputed'].includes(m.status));
+
 
   return (
     <div className="container mx-auto px-4 py-12">
@@ -50,7 +70,7 @@ export default async function MatchesPage() {
             <div className="grid gap-4 md:grid-cols-2">
               {pending.map((match: any) => (
                 <MatchCard 
-                  key={match._id.toString()} 
+                  key={match.id} 
                   match={JSON.parse(JSON.stringify(match))} 
                   currentUserId={session.user.id} 
                 />
@@ -66,7 +86,7 @@ export default async function MatchesPage() {
             <div className="grid gap-4 md:grid-cols-2">
               {active.map((match: any) => (
                 <MatchCard 
-                  key={match._id.toString()} 
+                  key={match.id} 
                   match={JSON.parse(JSON.stringify(match))} 
                   currentUserId={session.user.id} 
                 />
@@ -84,7 +104,7 @@ export default async function MatchesPage() {
             <div className="grid gap-4 md:grid-cols-2">
               {completed.map((match: any) => (
                 <MatchCard 
-                  key={match._id.toString()} 
+                  key={match.id} 
                   match={JSON.parse(JSON.stringify(match))} 
                   currentUserId={session.user.id} 
                 />

@@ -1,20 +1,21 @@
 import { DashboardClient } from '@/components/admin/DashboardClient';
-import dbConnect from '@/lib/db';
-import { User } from '@/models/User';
-import { BetaCode } from '@/models/BetaCode';
+import { db } from '@/lib/db';
+import { users, betaCodes } from '@/models/schema';
 import { getDashboardConfig } from '@/actions/settings.actions';
+import { count, sum, isNull } from 'drizzle-orm';
 
 export default async function AdminDashboardPage() {
-  await dbConnect();
   const config = await getDashboardConfig();
+
+  const totalUsersResult = await db.select({ count: count() }).from(users);
+  const activeBetaCodesResult = await db.select({ count: count() }).from(betaCodes).where(isNull(betaCodes.usedAt));
+  const totalCreditsResult = await db.select({ total: sum(users.creditBalance) }).from(users);
 
   // Initial data fetch
   const stats = {
-    totalUsers: await User.countDocuments(),
-    activeBetaCodes: await BetaCode.countDocuments({ usedAt: { $exists: false } }),
-    totalCredits: await User.aggregate([
-      { $group: { _id: null, total: { $sum: '$creditBalance' } } }
-    ]).then(res => res[0]?.total || 0),
+    totalUsers: totalUsersResult[0]?.count || 0,
+    activeBetaCodes: activeBetaCodesResult[0]?.count || 0,
+    totalCredits: Number(totalCreditsResult[0]?.total || 0),
     systemStatus: 'online'
   };
 
@@ -33,3 +34,4 @@ export default async function AdminDashboardPage() {
     </div>
   );
 }
+

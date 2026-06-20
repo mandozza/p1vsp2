@@ -1,36 +1,23 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
+import { z } from 'zod';
+import { bets } from './schema';
 
 export type BetStatus = 'pending' | 'won' | 'lost' | 'refunded';
 
-export interface IBet extends Document {
-  userId: mongoose.Types.ObjectId;
-  matchId: mongoose.Types.ObjectId;
-  votedForId: mongoose.Types.ObjectId;
-  amount: number;
-  odds: number; // Potential payout multiplier (e.g. 1.5, 2.0)
-  status: BetStatus;
+export const BetSchema = z.object({
+  userId: z.string(),
+  matchId: z.string(),
+  votedForId: z.string(),
+  amount: z.number().int().positive(),
+  odds: z.number().positive().default(2.0),
+  status: z.enum(['pending', 'won', 'lost', 'refunded']).default('pending'),
+});
+
+export type IBet = z.infer<typeof BetSchema> & {
+  id: string;
+  _id: string; // Maintain backward compatibility
   createdAt: Date;
   updatedAt: Date;
-}
+};
 
-const BetSchema = new Schema<IBet>(
-  {
-    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    matchId: { type: Schema.Types.ObjectId, ref: 'Match', required: true },
-    votedForId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    amount: { type: Number, required: true, min: 1 },
-    odds: { type: Number, default: 2.0 },
-    status: { 
-      type: String, 
-      enum: ['pending', 'won', 'lost', 'refunded'], 
-      default: 'pending' 
-    },
-  },
-  { timestamps: true }
-);
-
-BetSchema.index({ matchId: 1, status: 1 });
-BetSchema.index({ userId: 1, createdAt: -1 });
-
-export const Bet: Model<IBet> =
-  mongoose.models.Bet || mongoose.model<IBet>('Bet', BetSchema);
+export const Bet = bets;
+export default bets;

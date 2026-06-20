@@ -1,52 +1,54 @@
-import dbConnect from '@/lib/db';
-import { User } from '@/models/User';
+import { db } from '@/lib/db';
+import { User, IUser } from '@/models/User';
 import { Match } from '@/models/Match';
 import { Game } from '@/models/Game';
-import { UserAchievement } from '@/models/UserAchievement';
 import { Trophy, Swords, Zap, Shield, Crown, Medal, TrendingUp, Activity, ShieldCheck, LayoutGrid } from 'lucide-react';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
-import mongoose from 'mongoose';
 import { LeaderboardClient } from '@/components/custom/LeaderboardClient';
+import { eq, and, asc, count, sql } from 'drizzle-orm';
 
 export default async function LeaderboardPage({ searchParams }: { searchParams: { gameId?: string } }) {
-  await dbConnect();
-
-  const games = await Game.find({ active: true }).sort({ title: 1 }).lean();
-  const selectedGameId = searchParams.gameId || games[0]?._id?.toString();
+  const activeGames = await db.select().from(Game).where(eq(Game.active, true)).orderBy(asc(Game.title));
+  const selectedGameId = searchParams.gameId || activeGames[0]?.id;
 
   // 1. Fetch Top 50 Players by specific Game ELO
-  // We use aggregation to find players who have stats for the selected game
-  const topPlayers = await User.aggregate([
-    { 
-      $match: { 
-        role: 'member', 
-        'gameStats.gameId': new mongoose.Types.ObjectId(selectedGameId) 
-      } 
-    },
-    { 
-      $project: {
-        username: 1,
-        verificationStatus: 1,
-        gameStat: {
-          $filter: {
-            input: '$gameStats',
-            as: 'gs',
-            cond: { $eq: ['$$gs.gameId', new mongoose.Types.ObjectId(selectedGameId)] }
-          }
-        }
-      }
-    },
-    { $unwind: '$gameStat' },
-    { $sort: { 'gameStat.eloRating': -1 } },
-    { $limit: 50 }
-  ]);
+  const allMembers = await db.select().from(User).where(eq(User.role, 'member')) as IUser[];
+  const topPlayers = allMembers
+    .map(p => {
+      const matchedStat = p.gameStats?.find(gs => String(gs.gameId) === String(selectedGameId));
+      if (!matchedStat) return null;
+      return {
+        ...p,
+        _id: p.id,
+        gameStat: matchedStat,
+      };
+    })
+    .filter((p): p is NonNullable<typeof p> => p !== null)
+    .sort((a, b) => b.gameStat.eloRating - a.gameStat.eloRating)
+    .slice(0, 50);
+
 
   // 2. Sector Stats
+  const [completedMatchesRes] = await db
+    .select({ value: count() })
+    .from(Match)
+    .where(and(eq(Match.gameId, selectedGameId), eq(Match.status, 'completed')));
+
+  const [aiMatchesRes] = await db
+    .select({ value: count() })
+    .from(Match)
+    .where(
+      and(
+        eq(Match.gameId, selectedGameId),
+        sql`final_outcome->>'resolvedBy' = 'ai'`
+      )
+    );
+
   const stats = {
-    totalMatches: await Match.countDocuments({ gameId: selectedGameId, status: 'completed' }),
+    totalMatches: completedMatchesRes?.value ?? 0,
     totalPlayers: topPlayers.length,
-    aiVerifications: await Match.countDocuments({ gameId: selectedGameId, 'finalOutcome.resolvedBy': 'ai' }),
+    aiVerifications: aiMatchesRes?.value ?? 0,
   };
 
   return (
@@ -66,7 +68,7 @@ export default async function LeaderboardPage({ searchParams }: { searchParams: 
       </div>
 
       <LeaderboardClient 
-        games={JSON.parse(JSON.stringify(games))} 
+        games={JSON.parse(JSON.stringify(activeGames))} 
         initialPlayers={JSON.parse(JSON.stringify(topPlayers))}
         selectedGameId={selectedGameId}
         stats={stats}

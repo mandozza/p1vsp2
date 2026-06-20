@@ -1,10 +1,11 @@
 'use server';
 
-import dbConnect from '@/lib/db';
+import { db } from '@/lib/db';
 import { User } from '@/models/User';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
+import { eq } from 'drizzle-orm';
 
 export type ActionResult<T = any> = {
   success: boolean;
@@ -17,7 +18,6 @@ export type ActionResult<T = any> = {
  */
 export async function addCredits(amount: number, userId?: string): Promise<ActionResult> {
   try {
-    await dbConnect();
     const session = await getServerSession(authOptions);
     
     // If no userId provided, use current session user
@@ -29,15 +29,21 @@ export async function addCredits(amount: number, userId?: string): Promise<Actio
       return { success: false, error: 'Unauthorized' };
     }
 
-    const user = await User.findById(targetId);
+    const [user] = await db.select().from(User).where(eq(User.id, targetId));
     if (!user) return { success: false, error: 'User not found' };
 
-    user.creditBalance += amount;
-    await user.save();
+    const newBalance = user.creditBalance + amount;
+    await db.update(User)
+      .set({
+        creditBalance: newBalance,
+        updatedAt: new Date()
+      })
+      .where(eq(User.id, targetId));
 
     revalidatePath('/');
-    return { success: true, data: user.creditBalance };
+    return { success: true, data: newBalance };
   } catch (error: any) {
     return { success: false, error: error.message };
   }
 }
+

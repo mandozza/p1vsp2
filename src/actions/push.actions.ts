@@ -1,9 +1,10 @@
 'use server';
 
-import dbConnect from '@/lib/db';
+import { db } from '@/lib/db';
 import { User } from '@/models/User';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { eq } from 'drizzle-orm';
 
 /**
  * Saves a user's push subscription to the database.
@@ -13,10 +14,12 @@ export async function savePushSubscription(subscription: any) {
     const session = await getServerSession(authOptions);
     if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-    await dbConnect();
-    await User.findByIdAndUpdate(session.user.id, {
-      pushSubscription: subscription,
-    });
+    await db.update(User)
+      .set({
+        pushSubscription: subscription,
+        updatedAt: new Date()
+      })
+      .where(eq(User.id, session.user.id));
 
     return { success: true };
   } catch (error) {
@@ -33,10 +36,12 @@ export async function removePushSubscription() {
     const session = await getServerSession(authOptions);
     if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-    await dbConnect();
-    await User.findByIdAndUpdate(session.user.id, {
-      $unset: { pushSubscription: "" },
-    });
+    await db.update(User)
+      .set({
+        pushSubscription: null,
+        updatedAt: new Date()
+      })
+      .where(eq(User.id, session.user.id));
 
     return { success: true };
   } catch (error) {
@@ -44,3 +49,4 @@ export async function removePushSubscription() {
     return { success: false };
   }
 }
+

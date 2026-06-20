@@ -1,18 +1,18 @@
 'use server';
 
-import dbConnect from '@/lib/db';
+import { db } from '@/lib/db';
 import { User } from '@/models/User';
 import { UserAchievement } from '@/models/UserAchievement';
 import { ACHIEVEMENTS } from '@/lib/achievements.config';
 import { createNotification } from './notification.actions';
+import { eq, sql, count } from 'drizzle-orm';
 
 /**
  * Checks and unlocks match-related achievements for a user.
  */
 export async function evaluateMatchAchievements(userId: string) {
   try {
-    await dbConnect();
-    const user = await User.findById(userId);
+    const [user] = await db.select().from(User).where(eq(User.id, userId));
     if (!user) return;
 
     const unlocks = [];
@@ -41,25 +41,29 @@ export async function evaluateMatchAchievements(userId: string) {
     // Attempt to save each achievement (idempotency handled by unique index)
     for (const achievementId of unlocks) {
       try {
-        await UserAchievement.create({
-          userId,
-          achievementId,
-        });
+        const result = await db.insert(UserAchievement)
+          .values({
+            userId,
+            achievementId,
+          })
+          .onConflictDoNothing()
+          .returning();
 
-        // Notify the user
-        const achievement = ACHIEVEMENTS[achievementId];
-        await createNotification({
-          userId,
-          type: 'ACHIEVEMENT_UNLOCKED',
-          title: 'Achievement Unlocked!',
-          message: `You earned the ${achievement.name} badge: ${achievement.description}`,
-          link: `/profile`,
-        });
+        if (result.length > 0) {
+          // Notify the user if it was actually newly unlocked
+          const achievement = ACHIEVEMENTS[achievementId];
+          await createNotification({
+            userId,
+            type: 'ACHIEVEMENT_UNLOCKED',
+            title: 'Achievement Unlocked!',
+            message: `You earned the ${achievement.name} badge: ${achievement.description}`,
+            link: `/profile`,
+          });
 
-        console.log(`🏅 Achievement Unlocked: ${achievementId} for user ${userId}`);
+          console.log(`🏅 Achievement Unlocked: ${achievementId} for user ${userId}`);
+        }
       } catch (err: any) {
-        // If E11000 (duplicate key), user already has it, ignore
-        if (err.code !== 11000) console.error(`Failed to unlock ${achievementId}:`, err);
+        console.error(`Failed to unlock ${achievementId}:`, err);
       }
     }
   } catch (error) {
@@ -72,35 +76,41 @@ export async function evaluateMatchAchievements(userId: string) {
  */
 export async function evaluateTribunalAchievements(userId: string) {
   try {
-    await dbConnect();
-    const user = await User.findById(userId);
+    const [user] = await db.select().from(User).where(eq(User.id, userId));
     if (!user) return;
 
     // To evaluate tribunal judge, we need to count their votes in the Match model.
-    // However, it's more efficient to check if they've already hit the milestone.
     const { Match } = await import('@/models/Match');
-    const voteCount = await Match.countDocuments({ 'votes.userId': userId });
+    const voteCountResult = await db.select({ count: count() })
+      .from(Match)
+      .where(sql`votes @> ${JSON.stringify([{ userId }])}::jsonb`);
+    const voteCount = voteCountResult[0]?.count || 0;
 
     if (voteCount >= 10) {
       try {
-        await UserAchievement.create({
-          userId,
-          achievementId: 'TRIBUNAL_JUDGE',
-        });
+        const result = await db.insert(UserAchievement)
+          .values({
+            userId,
+            achievementId: 'TRIBUNAL_JUDGE',
+          })
+          .onConflictDoNothing()
+          .returning();
 
-        // Notify the user
-        const achievement = ACHIEVEMENTS['TRIBUNAL_JUDGE'];
-        await createNotification({
-          userId,
-          type: 'ACHIEVEMENT_UNLOCKED',
-          title: 'Achievement Unlocked!',
-          message: `You earned the ${achievement.name} badge: ${achievement.description}`,
-          link: `/profile`,
-        });
+        if (result.length > 0) {
+          // Notify the user
+          const achievement = ACHIEVEMENTS['TRIBUNAL_JUDGE'];
+          await createNotification({
+            userId,
+            type: 'ACHIEVEMENT_UNLOCKED',
+            title: 'Achievement Unlocked!',
+            message: `You earned the ${achievement.name} badge: ${achievement.description}`,
+            link: `/profile`,
+          });
 
-        console.log(`🏅 Achievement Unlocked: TRIBUNAL_JUDGE for user ${userId}`);
+          console.log(`🏅 Achievement Unlocked: TRIBUNAL_JUDGE for user ${userId}`);
+        }
       } catch (err: any) {
-        if (err.code !== 11000) console.error('Failed to unlock TRIBUNAL_JUDGE:', err);
+        console.error('Failed to unlock TRIBUNAL_JUDGE:', err);
       }
     }
   } catch (error) {
@@ -113,8 +123,11 @@ export async function evaluateTribunalAchievements(userId: string) {
  */
 export async function getUserAchievements(userId: string) {
   try {
-    await dbConnect();
-    return await UserAchievement.find({ userId }).lean();
+    const rawAchievements = await db.select().from(UserAchievement).where(eq(UserAchievement.userId, userId));
+    return rawAchievements.map((a: any) => ({
+      ...a,
+      _id: a.id,
+    }));
   } catch (error) {
     console.error('Fetch Achievements Error:', error);
     return [];

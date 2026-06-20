@@ -1,6 +1,6 @@
 'use server';
 
-import dbConnect from '@/lib/db';
+import { db } from '@/lib/db';
 import { Match } from '@/models/Match';
 import { Game } from '@/models/Game';
 import { User } from '@/models/User';
@@ -20,13 +20,13 @@ import { updateRivalry } from './rivalry.actions';
 import { transferCredits } from '@/lib/economy';
 import { generateMatchPrediction, resolveMatchBets } from './betting.actions';
 import { sendDiscordNotification } from '@/lib/discord';
+import { eq, and, or, desc } from 'drizzle-orm';
 
 /**
  * Creates a new match challenge.
  */
 export async function createChallenge(defenderId: string, gameId: string, wagerAmount = 0): Promise<ActionResult> {
   try {
-    await dbConnect();
     const session = await getServerSession(authOptions);
     if (!session?.user) return { success: false, error: 'Unauthorized' };
 
@@ -43,13 +43,15 @@ export async function createChallenge(defenderId: string, gameId: string, wagerA
       if (!escrow.success) return { success: false, error: `Escrow failed: ${escrow.error}` };
     }
 
-    const match = await Match.create({
-      gameId,
-      challengerId,
-      defenderId,
-      status: 'pending',
-      wagerAmount,
-    });
+    const [match] = await db.insert(Match)
+      .values({
+        gameId,
+        challengerId,
+        defenderId,
+        status: 'pending',
+        wagerAmount,
+      })
+      .returning();
 
     // Notify Defender
     await createNotification({
@@ -61,7 +63,7 @@ export async function createChallenge(defenderId: string, gameId: string, wagerA
     });
 
     revalidatePath('/matches');
-    return { success: true, data: match._id };
+    return { success: true, data: match.id };
   } catch (error: any) {
     return { success: false, error: error.message };
   }
@@ -72,11 +74,10 @@ export async function createChallenge(defenderId: string, gameId: string, wagerA
  */
 export async function acceptChallenge(matchId: string): Promise<ActionResult> {
   try {
-    await dbConnect();
     const session = await getServerSession(authOptions);
     if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-    const match = await Match.findById(matchId);
+    const [match] = await db.select().from(Match).where(eq(Match.id, matchId));
     if (!match) return { success: false, error: 'Match not found' };
     if (match.defenderId.toString() !== session.user.id) return { success: false, error: 'Unauthorized' };
     if (match.status !== 'pending') return { success: false, error: 'Challenge is no longer pending' };
@@ -87,13 +88,17 @@ export async function acceptChallenge(matchId: string): Promise<ActionResult> {
         userId: session.user.id,
         amount: -match.wagerAmount,
         type: 'WAGER_ESCROW',
-        referenceId: match._id,
+        referenceId: match.id,
       });
       if (!escrow.success) return { success: false, error: `Escrow failed: ${escrow.error}` };
     }
 
-    match.status = 'accepted';
-    await match.save();
+    await db.update(Match)
+      .set({
+        status: 'accepted',
+        updatedAt: new Date()
+      })
+      .where(eq(Match.id, matchId));
 
     // Trigger AI Prediction
     generateMatchPrediction(matchId);
@@ -110,11 +115,10 @@ export async function acceptChallenge(matchId: string): Promise<ActionResult> {
  */
 export async function cancelChallenge(matchId: string): Promise<ActionResult> {
   try {
-    await dbConnect();
     const session = await getServerSession(authOptions);
     if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-    const match = await Match.findById(matchId);
+    const [match] = await db.select().from(Match).where(eq(Match.id, matchId));
     if (!match) return { success: false, error: 'Match not found' };
     if (match.challengerId.toString() !== session.user.id) return { success: false, error: 'Unauthorized' };
     if (match.status !== 'pending') return { success: false, error: 'Cannot cancel active match' };
@@ -125,12 +129,16 @@ export async function cancelChallenge(matchId: string): Promise<ActionResult> {
         userId: match.challengerId.toString(),
         amount: match.wagerAmount,
         type: 'WAGER_REFUND',
-        referenceId: match._id,
+        referenceId: match.id,
       });
     }
 
-    match.status = 'cancelled';
-    await match.save();
+    await db.update(Match)
+      .set({
+        status: 'cancelled',
+        updatedAt: new Date()
+      })
+      .where(eq(Match.id, matchId));
 
     revalidatePath('/matches');
     return { success: true };
@@ -144,11 +152,10 @@ export async function cancelChallenge(matchId: string): Promise<ActionResult> {
  */
 export async function getResultUploadUrl(matchId: string, contentType: string): Promise<ActionResult> {
   try {
-    await dbConnect();
     const session = await getServerSession(authOptions);
     if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-    const match = await Match.findById(matchId);
+    const [match] = await db.select().from(Match).where(eq(Match.id, matchId));
     if (!match) return { success: false, error: 'Match not found' };
 
     const isParticipant = match.challengerId.toString() === session.user.id || 
@@ -171,11 +178,10 @@ export async function getResultUploadUrl(matchId: string, contentType: string): 
  */
 export async function submitMatchResult(matchId: string, screenshotUrl: string, videoUrl?: string): Promise<ActionResult> {
   try {
-    await dbConnect();
     const session = await getServerSession(authOptions);
     if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-    const match = await Match.findById(matchId);
+    const [match] = await db.select().from(Match).where(eq(Match.id, matchId));
     if (!match) return { success: false, error: 'Match not found' };
 
     const isParticipant = match.challengerId.toString() === session.user.id || 
@@ -184,25 +190,38 @@ export async function submitMatchResult(matchId: string, screenshotUrl: string, 
     if (!isParticipant) return { success: false, error: 'Unauthorized' };
 
     // Check if user already submitted
-    const existingResult = match.results.find(r => r.userId.toString() === session.user.id);
+    const existingResult = match.results.find((r: any) => r.userId.toString() === session.user.id);
     if (existingResult) return { success: false, error: 'You have already submitted a result' };
 
-    match.results.push({
-      userId: session.user.id,
-      screenshotUrl,
-      videoUrl,
-      submittedAt: new Date(),
-    });
+    const updatedResults = [
+      ...match.results,
+      {
+        userId: session.user.id,
+        screenshotUrl,
+        videoUrl,
+        submittedAt: new Date().toISOString(),
+      }
+    ];
 
     // Update status to awaiting_results if both haven't submitted, or verifying if both have
-    if (match.results.length === 2) {
-      match.status = 'verifying';
-      await match.save();
+    let newStatus = match.status;
+    if (updatedResults.length === 2) {
+      newStatus = 'verifying';
+    } else {
+      newStatus = 'awaiting_results';
+    }
+
+    await db.update(Match)
+      .set({
+        results: updatedResults,
+        status: newStatus,
+        updatedAt: new Date()
+      })
+      .where(eq(Match.id, matchId));
+
+    if (updatedResults.length === 2) {
       // Trigger AI verification
       processMatchVerification(matchId);
-    } else {
-      match.status = 'awaiting_results';
-      await match.save();
     }
 
     revalidatePath(`/matches/${matchId}`);
@@ -217,31 +236,45 @@ export async function submitMatchResult(matchId: string, screenshotUrl: string, 
  */
 async function processMatchVerification(matchId: string) {
   try {
-    await dbConnect();
-    const match = await Match.findById(matchId).populate('gameId');
+    const [match] = await db.select().from(Match).where(eq(Match.id, matchId));
     if (!match || match.results.length !== 2) return;
 
-    const game = match.gameId as any;
+    const [game] = await db.select().from(Game).where(eq(Game.id, match.gameId));
+    if (!game) return;
 
     // 1. Extract data from both screenshots using dynamic prompts
     const extractions = await Promise.all(
-      match.results.map(r => extractMatchData(r.screenshotUrl, game.aiPrompt, game.gameType))
+      match.results.map((r: any) => extractMatchData(r.screenshotUrl, game.aiPrompt || undefined, game.gameType))
     );
 
     // Save extractions to match record
-    match.results[0].aiExtractedData = extractions[0];
-    match.results[1].aiExtractedData = extractions[1];
+    const updatedResults = [...match.results];
+    updatedResults[0].aiExtractedData = extractions[0];
+    updatedResults[1].aiExtractedData = extractions[1];
 
     // 2. Check for consensus
     const { consensus, data } = verifyConsensus(extractions[0], extractions[1]);
 
     if (consensus) {
+      await db.update(Match)
+        .set({
+          results: updatedResults,
+          updatedAt: new Date()
+        })
+        .where(eq(Match.id, matchId));
+
       // 3. Resolve Match Automatically
       await resolveMatch(matchId, data, 'ai');
     } else {
       // 4. Flag as Disputed for Community Resolution
-      match.status = 'disputed';
-      await match.save();
+      await db.update(Match)
+        .set({
+          results: updatedResults,
+          status: 'disputed',
+          updatedAt: new Date()
+        })
+        .where(eq(Match.id, matchId));
+
       revalidatePath(`/matches/${matchId}`);
     }
   } catch (error) {
@@ -258,14 +291,15 @@ export async function resolveMatch(
   resolvedBy: 'ai' | 'admin' | 'community'
 ): Promise<ActionResult> {
   try {
-    await dbConnect();
-    const match = await Match.findById(matchId).populate('challengerId defenderId');
+    const [match] = await db.select().from(Match).where(eq(Match.id, matchId));
     if (!match) return { success: false, error: 'Match not found' };
 
     // Identify Winner and Loser
-    const challenger = match.challengerId as any;
-    const defender = match.defenderId as any;
+    const [challenger] = await db.select().from(User).where(eq(User.id, match.challengerId));
+    const [defender] = await db.select().from(User).where(eq(User.id, match.defenderId));
     
+    if (!challenger || !defender) return { success: false, error: 'Players not found' };
+
     // Fuzzy match winnerTag with usernames
     const winnerTag = outcome.winnerTag.toLowerCase();
     const isChallengerWinner = challenger.username.toLowerCase() === winnerTag || 
@@ -279,8 +313,8 @@ export async function resolveMatch(
     const getGameStat = (user: any) => {
       let stat = user.gameStats.find((gs: any) => gs.gameId.toString() === gameId);
       if (!stat) {
-        user.gameStats.push({ gameId, eloRating: 1000, stats: { wins: 0, losses: 0, draws: 0, dnfs: 0 } });
-        stat = user.gameStats[user.gameStats.length - 1];
+        stat = { gameId, eloRating: 1000, stats: { wins: 0, losses: 0, draws: 0, dnfs: 0 } };
+        user.gameStats = [...user.gameStats, stat];
       }
       return stat;
     };
@@ -295,7 +329,15 @@ export async function resolveMatch(
     winnerGS.stats.wins += 1;
     winner.eloRating = winnerNewElo; 
     winner.stats.wins += 1;
-    await winner.save();
+
+    await db.update(User)
+      .set({
+        eloRating: winner.eloRating,
+        stats: winner.stats,
+        gameStats: winner.gameStats,
+        updatedAt: new Date()
+      })
+      .where(eq(User.id, winner.id));
 
     // Update Loser Stats (Global + Game Specific)
     loserGS.eloRating = loserNewElo;
@@ -305,16 +347,24 @@ export async function resolveMatch(
     loser.eloRating = loserNewElo;
     loser.stats.losses += 1;
     if (outcome.isDNF) loser.stats.dnfs += 1;
-    await loser.save();
+
+    await db.update(User)
+      .set({
+        eloRating: loser.eloRating,
+        stats: loser.stats,
+        gameStats: loser.gameStats,
+        updatedAt: new Date()
+      })
+      .where(eq(User.id, loser.id));
 
     // 1. Resolve Wager
     if (match.wagerAmount > 0) {
       const potSize = match.wagerAmount * 2;
       await transferCredits({
-        userId: winner._id.toString(),
+        userId: winner.id,
         amount: potSize,
         type: 'WAGER_WIN',
-        referenceId: match._id,
+        referenceId: match.id,
       });
 
       // Broadcast high-stakes victories to Discord
@@ -342,18 +392,24 @@ export async function resolveMatch(
     });
 
     // Finalize Match Record
-    match.status = 'completed';
-    match.finalOutcome = {
-      winnerId: winner._id,
+    const finalOutcome = {
+      winnerId: winner.id,
       method: outcome.method,
       round: outcome.round,
       time: outcome.time,
       isDNF: outcome.isDNF,
       commentary,
-      resolvedAt: new Date(),
+      resolvedAt: new Date().toISOString(),
       resolvedBy,
     };
-    await match.save();
+
+    await db.update(Match)
+      .set({
+        status: 'completed',
+        finalOutcome,
+        updatedAt: new Date()
+      })
+      .where(eq(Match.id, matchId));
 
     revalidatePath(`/matches/${matchId}`);
     revalidatePath('/players');
@@ -361,14 +417,14 @@ export async function resolveMatch(
     // Notify both players
     await Promise.all([
       createNotification({
-        userId: winner._id.toString(),
+        userId: winner.id,
         type: 'MATCH_RESOLVED',
         title: 'Victory Verified!',
         message: `Your match against ${loser.username} was resolved. You won${match.wagerAmount > 0 ? ` the pot of ${match.wagerAmount * 2} credits!` : '!'}`,
         link: `/matches/${matchId}`,
       }),
       createNotification({
-        userId: loser._id.toString(),
+        userId: loser.id,
         type: 'MATCH_RESOLVED',
         title: 'Match Resolved',
         message: `Your match against ${winner.username} was resolved. Outcome: Defeat.`,
@@ -378,25 +434,25 @@ export async function resolveMatch(
 
     // Evaluate Achievements
     await Promise.all([
-      evaluateMatchAchievements(winner._id.toString()),
-      evaluateMatchAchievements(loser._id.toString()),
+      evaluateMatchAchievements(winner.id),
+      evaluateMatchAchievements(loser.id),
     ]);
 
     // Tournament Progression
     if (match.tournamentId) {
-      await checkTournamentProgression(match.tournamentId.toString());
+      await checkTournamentProgression(match.tournamentId);
     }
 
     // Update Rivalry Stats
     await updateRivalry({
       matchId,
-      winnerId: winner._id.toString(),
-      playerAId: challenger._id.toString(),
-      playerBId: defender._id.toString(),
+      winnerId: winner.id,
+      playerAId: challenger.id,
+      playerBId: defender.id,
     });
 
     // Resolve Side-Bets
-    await resolveMatchBets(matchId, winner._id.toString());
+    await resolveMatchBets(matchId, winner.id);
 
     return { success: true };
   } catch (error: any) {

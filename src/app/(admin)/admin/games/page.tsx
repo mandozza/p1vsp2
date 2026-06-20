@@ -1,10 +1,10 @@
-import dbConnect from '@/lib/db';
+import { db } from '@/lib/db';
 import { Game } from '@/models/Game';
 import { AdminGamesClient } from '@/components/admin/AdminGamesClient';
+import { desc } from 'drizzle-orm';
 
 export default async function AdminGamesPage() {
-  await dbConnect();
-  const games = await Game.find({}).sort({ createdAt: -1 }).lean();
+  const games = await db.select().from(Game).orderBy(desc(Game.createdAt));
 
   return (
     <div className="mx-auto max-w-7xl">
@@ -12,3 +12,4 @@ export default async function AdminGamesPage() {
     </div>
   );
 }
+

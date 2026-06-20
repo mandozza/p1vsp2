@@ -1,6 +1,8 @@
 import { EventEmitter } from 'events';
-import mongoose from 'mongoose';
-import dbConnect from '@/lib/db';
+import { Client } from 'pg';
+import { db } from '@/lib/db';
+import { User } from '@/models/User';
+import { eq } from 'drizzle-orm';
 
 export type ActivityType = 'WIN' | 'CHALLENGE' | 'VICTORY' | 'ACHIEVEMENT';
 
@@ -15,87 +17,97 @@ export interface ActivityEvent {
 const emitter = new EventEmitter();
 emitter.setMaxListeners(500);
 
-let changeStreamInitialized = false;
+let pgClientInitialized = false;
+let pgClient: Client | null = null;
 
-async function initChangeStreams() {
-  if (changeStreamInitialized) return;
+async function initPgClient() {
+  if (pgClientInitialized) return;
   
   try {
-    await dbConnect();
-    const db = mongoose.connection.db;
-    if (!db) return;
+    const connectionString = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/p1vsp2';
+    pgClient = new Client({ connectionString });
+    await pgClient.connect();
+    
+    pgClientInitialized = true;
+    console.log('📡 Connected to PG for Activity stream notifications');
 
-    changeStreamInitialized = true;
+    await pgClient.query('LISTEN matches_change');
+    await pgClient.query('LISTEN user_achievements_change');
 
-    // 1. Watch Matches (Challenges & Victories)
-    const matchStream = db.collection('matches').watch(
-      [{ $match: { operationType: { $in: ['insert', 'update'] } } }],
-      { fullDocument: 'updateLookup' }
-    );
+    pgClient.on('notification', async (msg) => {
+      try {
+        if (!msg.payload) return;
+        const change = JSON.parse(msg.payload);
+        const doc = change.fullDocument;
+        if (!doc) return;
 
-    matchStream.on('change', async (change: any) => {
-      const doc = change.fullDocument;
-      if (!doc) return;
+        if (msg.channel === 'matches_change') {
+          // 1. New Challenge (Insert)
+          if (change.operationType === 'insert') {
+            const [challenger] = await db.select({ username: User.username }).from(User).where(eq(User.id, doc.challenger_id));
+            const [defender] = await db.select({ username: User.username }).from(User).where(eq(User.id, doc.defender_id));
 
-      // New Challenge
-      if (change.operationType === 'insert') {
-        const [challenger, defender] = await Promise.all([
-          mongoose.model('User').findById(doc.challengerId).select('username').lean(),
-          mongoose.model('User').findById(doc.defenderId).select('username').lean(),
-        ]);
+            emitter.emit('activity', {
+              id: String(doc.id),
+              type: 'CHALLENGE',
+              message: `${challenger?.username || 'A player'} challenged ${defender?.username || 'someone'} to a duel!`,
+              timestamp: new Date(),
+            });
+          }
 
-        emitter.emit('activity', {
-          id: String(doc._id),
-          type: 'CHALLENGE',
-          message: `${challenger?.username || 'A player'} challenged ${defender?.username || 'someone'} to a duel!`,
-          timestamp: new Date(),
-        });
-      }
+          // 2. Match Victory (Update to completed)
+          if (change.operationType === 'update' && doc.status === 'completed') {
+            // Note: Since doc was updated, we inspect the finalOutcome fields
+            // finalOutcome is a JSONB column in Postgres, which node-pg automatically parses as a JS object.
+            const outcome = doc.final_outcome;
+            if (outcome && outcome.winnerId) {
+              const winnerId = outcome.winnerId;
+              const loserId = doc.challenger_id === winnerId ? doc.defender_id : doc.challenger_id;
 
-      // Match Victory
-      if (change.operationType === 'update' && doc.status === 'completed' && change.updateDescription.updatedFields.status === 'completed') {
-        const [winner, loser] = await Promise.all([
-          mongoose.model('User').findById(doc.finalOutcome.winnerId).select('username').lean(),
-          mongoose.model('User').findById(doc.challengerId.toString() === doc.finalOutcome.winnerId.toString() ? doc.defenderId : doc.challengerId).select('username').lean(),
-        ]);
+              const [winner] = await db.select({ username: User.username }).from(User).where(eq(User.id, winnerId));
+              const [loser] = await db.select({ username: User.username }).from(User).where(eq(User.id, loserId));
 
-        emitter.emit('activity', {
-          id: String(doc._id),
-          type: 'VICTORY',
-          message: `${winner?.username || 'A player'} CRUSHED ${loser?.username || 'someone'} in the arena!`,
-          timestamp: new Date(),
-        });
+              emitter.emit('activity', {
+                id: String(doc.id),
+                type: 'VICTORY',
+                message: `${winner?.username || 'A player'} CRUSHED ${loser?.username || 'someone'} in the arena!`,
+                timestamp: new Date(),
+              });
+            }
+          }
+        } else if (msg.channel === 'user_achievements_change') {
+          // 3. New Achievement
+          if (change.operationType === 'insert') {
+            const [user] = await db.select({ username: User.username }).from(User).where(eq(User.id, doc.user_id));
+            
+            emitter.emit('activity', {
+              id: String(doc.id),
+              type: 'ACHIEVEMENT',
+              message: `${user?.username || 'A player'} just unlocked [${doc.achievement_id}]!`,
+              timestamp: new Date(),
+            });
+          }
+        }
+      } catch (e) {
+        console.error('Failed to parse activity notification:', e);
       }
     });
 
-    // 2. Watch Achievements
-    const achievementStream = db.collection('userachievements').watch(
-      [{ $match: { operationType: 'insert' } }],
-      { fullDocument: 'updateLookup' }
-    );
-
-    achievementStream.on('change', async (change: any) => {
-      const doc = change.fullDocument;
-      if (!doc) return;
-
-      const user = await mongoose.model('User').findById(doc.userId).select('username').lean();
-      
-      emitter.emit('activity', {
-        id: String(doc._id),
-        type: 'ACHIEVEMENT',
-        message: `${user?.username || 'A player'} just unlocked [${doc.achievementId}]!`,
-        timestamp: new Date(),
-      });
+    pgClient.on('error', (err) => {
+      console.error('PG Client Activity Stream error:', err);
+      pgClientInitialized = false;
+      setTimeout(initPgClient, 5000);
     });
 
   } catch (error) {
-    console.error('Failed to init Activity Change Streams:', error);
-    changeStreamInitialized = false;
+    console.error('Failed to init Activity PG Client:', error);
+    pgClientInitialized = false;
+    setTimeout(initPgClient, 5000);
   }
 }
 
 export function onActivity(callback: (event: ActivityEvent) => void): () => void {
-  initChangeStreams();
+  initPgClient();
   emitter.on('activity', callback);
   return () => emitter.off('activity', callback);
 }

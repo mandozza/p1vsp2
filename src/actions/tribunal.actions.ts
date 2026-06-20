@@ -1,6 +1,6 @@
 'use server';
 
-import dbConnect from '@/lib/db';
+import { db } from '@/lib/db';
 import { Match } from '@/models/Match';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -9,6 +9,7 @@ import { ActionResult } from './credit.actions';
 import { resolveMatch } from './match.actions';
 import { evaluateTribunalAchievements } from './achievement.actions';
 import { transferCredits } from '@/lib/economy';
+import { eq } from 'drizzle-orm';
 
 /**
  * Casts a vote for a disputed match.
@@ -18,11 +19,10 @@ export async function castTribunalVote(
   votedForId: string
 ): Promise<ActionResult> {
   try {
-    await dbConnect();
     const session = await getServerSession(authOptions);
     if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-    const match = await Match.findById(matchId);
+    const [match] = await db.select().from(Match).where(eq(Match.id, matchId));
     if (!match || match.status !== 'disputed') return { success: false, error: 'Dispute not found' };
 
     // Prevent participants from voting
@@ -32,23 +32,34 @@ export async function castTribunalVote(
     }
 
     // Check if already voted
-    const existingVote = match.votes.find(v => v.userId.toString() === session.user.id);
+    const existingVote = match.votes.find((v: any) => v.userId.toString() === session.user.id);
     if (existingVote) return { success: false, error: 'You have already voted' };
 
-    match.votes.push({
-      userId: session.user.id,
-      votedForId,
-      createdAt: new Date(),
-    });
+    const updatedVotes = [
+      ...match.votes,
+      {
+        userId: session.user.id,
+        votedForId,
+        createdAt: new Date().toISOString(),
+      }
+    ];
 
-    await match.save();
+    await db.update(Match)
+      .set({
+        votes: updatedVotes,
+        updatedAt: new Date()
+      })
+      .where(eq(Match.id, matchId));
+
+    // Update local reference for the remaining logic
+    match.votes = updatedVotes;
 
     // Reward the voter
     await transferCredits({
       userId: session.user.id,
       amount: 50,
       type: 'TRIBUNAL_REWARD',
-      referenceId: match._id,
+      referenceId: match.id,
     });
 
     // Evaluate Achievements
@@ -57,13 +68,13 @@ export async function castTribunalVote(
     // AUTO-RESOLUTION: If we hit a threshold (e.g., 5 votes), resolve based on majority
     const VOTE_THRESHOLD = 5;
     if (match.votes.length >= VOTE_THRESHOLD) {
-      const challengerVotes = match.votes.filter(v => v.votedForId.toString() === match.challengerId.toString()).length;
-      const defenderVotes = match.votes.filter(v => v.votedForId.toString() === match.defenderId.toString()).length;
+      const challengerVotes = match.votes.filter((v: any) => v.votedForId.toString() === match.challengerId.toString()).length;
+      const defenderVotes = match.votes.filter((v: any) => v.votedForId.toString() === match.defenderId.toString()).length;
       
       const winnerId = challengerVotes > defenderVotes ? match.challengerId : match.defenderId;
       
       // We take the AI extraction data from the "winner's" submission as the truth for the outcome details
-      const winnerSubmission = match.results.find(r => r.userId.toString() === winnerId.toString());
+      const winnerSubmission = match.results.find((r: any) => r.userId.toString() === winnerId.toString());
       
       await resolveMatch(
         matchId, 
@@ -84,3 +95,4 @@ export async function castTribunalVote(
     return { success: false, error: error.message };
   }
 }
+

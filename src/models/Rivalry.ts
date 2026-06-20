@@ -1,39 +1,25 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
+import { z } from 'zod';
+import { rivalries } from './schema';
 
-export interface IRivalry extends Document {
-  player1Id: mongoose.Types.ObjectId;
-  player2Id: mongoose.Types.ObjectId;
-  stats: {
-    player1Wins: number;
-    player2Wins: number;
-    draws: number;
-  };
-  totalMatches: number;
-  beltHolderId?: mongoose.Types.ObjectId;
-  lastMatchId: mongoose.Types.ObjectId;
+export const RivalrySchema = z.object({
+  player1Id: z.string(),
+  player2Id: z.string(),
+  stats: z.object({
+    player1Wins: z.number().int().nonnegative().default(0),
+    player2Wins: z.number().int().nonnegative().default(0),
+    draws: z.number().int().nonnegative().default(0),
+  }).default({ player1Wins: 0, player2Wins: 0, draws: 0 }),
+  totalMatches: z.number().int().nonnegative().default(0),
+  beltHolderId: z.string().optional(),
+  lastMatchId: z.string().optional(),
+});
+
+export type IRivalry = z.infer<typeof RivalrySchema> & {
+  id: string;
+  _id: string; // Maintain backward compatibility
   createdAt: Date;
   updatedAt: Date;
-}
+};
 
-const RivalrySchema = new Schema<IRivalry>(
-  {
-    player1Id: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    player2Id: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    stats: {
-      player1Wins: { type: Number, default: 0 },
-      player2Wins: { type: Number, default: 0 },
-      draws: { type: Number, default: 0 },
-    },
-    totalMatches: { type: Number, default: 0 },
-    beltHolderId: { type: Schema.Types.ObjectId, ref: 'User' },
-    lastMatchId: { type: Schema.Types.ObjectId, ref: 'Match' },
-  },
-  { timestamps: true }
-);
-
-// Ensure only one rivalry record exists between any two users
-// Lexicographical sorting of IDs should be handled in the action layer
-RivalrySchema.index({ player1Id: 1, player2Id: 1 }, { unique: true });
-
-export const Rivalry: Model<IRivalry> =
-  mongoose.models.Rivalry || mongoose.model<IRivalry>('Rivalry', RivalrySchema);
+export const Rivalry = rivalries;
+export default rivalries;

@@ -1,15 +1,17 @@
 'use server';
 
-import dbConnect from '@/lib/db';
+import { db } from '@/lib/db';
 import { Bet } from '@/models/Bet';
 import { Match } from '@/models/Match';
 import { User } from '@/models/User';
+import { Game } from '@/models/Game';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { revalidatePath } from 'next/cache';
 import { transferCredits } from '@/lib/economy';
 import { ActionResult } from './credit.actions';
 import { predictMatchOutcome } from '@/lib/oracle-predictions';
+import { eq, and } from 'drizzle-orm';
 
 /**
  * Places a side-bet on a match.
@@ -20,12 +22,11 @@ export async function placeSideBet(data: {
   amount: number;
 }): Promise<ActionResult> {
   try {
-    await dbConnect();
     const session = await getServerSession(authOptions);
     if (!session?.user) return { success: false, error: 'Unauthorized' };
 
-    const match = await Match.findById(data.matchId);
-    if (!match || match.status !== 'accepted' && match.status !== 'awaiting_results') {
+    const [match] = await db.select().from(Match).where(eq(Match.id, data.matchId));
+    if (!match || (match.status !== 'accepted' && match.status !== 'awaiting_results')) {
       return { success: false, error: 'Match not open for betting' };
     }
 
@@ -34,7 +35,7 @@ export async function placeSideBet(data: {
       userId: session.user.id,
       amount: -data.amount,
       type: 'WAGER_ESCROW', // Reusing wager escrow for bets
-      referenceId: match._id,
+      referenceId: match.id,
     });
 
     if (!escrow.success) return { success: false, error: escrow.error };
@@ -48,14 +49,15 @@ export async function placeSideBet(data: {
     }
 
     // 3. Create Bet
-    await Bet.create({
-      userId: session.user.id,
-      matchId: data.matchId,
-      votedForId: data.votedForId,
-      amount: data.amount,
-      odds,
-      status: 'pending',
-    });
+    await db.insert(Bet)
+      .values({
+        userId: session.user.id,
+        matchId: data.matchId,
+        votedForId: data.votedForId,
+        amount: data.amount,
+        odds: odds.toFixed(2),
+        status: 'pending',
+      });
 
     revalidatePath(`/matches/${data.matchId}`);
     return { success: true };
@@ -69,39 +71,44 @@ export async function placeSideBet(data: {
  */
 export async function generateMatchPrediction(matchId: string) {
   try {
-    await dbConnect();
-    const match = await Match.findById(matchId)
-      .populate('challengerId defenderId gameId')
-      .lean();
-
+    const [match] = await db.select().from(Match).where(eq(Match.id, matchId));
     if (!match) return;
+
+    const [challenger] = await db.select().from(User).where(eq(User.id, match.challengerId));
+    const [defender] = await db.select().from(User).where(eq(User.id, match.defenderId));
+    const [game] = await db.select().from(Game).where(eq(Game.id, match.gameId));
+
+    if (!challenger || !defender || !game) return;
 
     const prediction = await predictMatchOutcome({
       challenger: {
-        username: (match.challengerId as any).username,
-        elo: (match.challengerId as any).eloRating,
-        stats: (match.challengerId as any).stats,
+        username: challenger.username,
+        elo: challenger.eloRating,
+        stats: challenger.stats,
       },
       defender: {
-        username: (match.defenderId as any).username,
-        elo: (match.defenderId as any).eloRating,
-        stats: (match.defenderId as any).stats,
+        username: defender.username,
+        elo: defender.eloRating,
+        stats: defender.stats,
       },
-      gameTitle: (match.gameId as any).title,
+      gameTitle: game.title,
     });
 
     if (prediction) {
-      await Match.findByIdAndUpdate(matchId, {
-        prediction: {
-          predictedWinnerId: prediction.predictedWinner === 'challenger' ? match.challengerId : match.defenderId,
-          confidence: prediction.confidence,
-          analysis: prediction.analysis,
-          odds: {
-            challenger: prediction.challengerOdds,
-            defender: prediction.defenderOdds,
+      await db.update(Match)
+        .set({
+          prediction: {
+            predictedWinnerId: prediction.predictedWinner === 'challenger' ? challenger.id : defender.id,
+            confidence: prediction.confidence,
+            analysis: prediction.analysis,
+            odds: {
+              challenger: prediction.challengerOdds,
+              defender: prediction.defenderOdds,
+            },
           },
-        },
-      });
+          updatedAt: new Date()
+        })
+        .where(eq(Match.id, matchId));
       revalidatePath(`/matches/${matchId}`);
     }
   } catch (error) {
@@ -114,27 +121,31 @@ export async function generateMatchPrediction(matchId: string) {
  */
 export async function resolveMatchBets(matchId: string, winnerId: string) {
   try {
-    await dbConnect();
-    const bets = await Bet.find({ matchId, status: 'pending' });
+    const betsList = await db.select().from(Bet).where(and(eq(Bet.matchId, matchId), eq(Bet.status, 'pending')));
 
-    for (const bet of bets) {
+    for (const bet of betsList) {
       const isWinner = bet.votedForId.toString() === winnerId.toString();
 
       if (isWinner) {
-        const payout = Math.round(bet.amount * bet.odds);
+        const oddsNum = Number(bet.odds || 2.0);
+        const payout = Math.round(bet.amount * oddsNum);
         await transferCredits({
-          userId: bet.userId.toString(),
+          userId: bet.userId,
           amount: payout,
           type: 'WAGER_WIN',
-          referenceId: bet._id,
+          referenceId: bet.id,
         });
-        bet.status = 'won';
+        await db.update(Bet)
+          .set({ status: 'won', updatedAt: new Date() })
+          .where(eq(Bet.id, bet.id));
       } else {
-        bet.status = 'lost';
+        await db.update(Bet)
+          .set({ status: 'lost', updatedAt: new Date() })
+          .where(eq(Bet.id, bet.id));
       }
-      await bet.save();
     }
   } catch (error) {
     console.error('Failed to resolve match bets:', error);
   }
 }
+

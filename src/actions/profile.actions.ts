@@ -1,6 +1,6 @@
 'use server';
 
-import dbConnect from '@/lib/db';
+import { db } from '@/lib/db';
 import { User } from '@/models/User';
 import { Match } from '@/models/Match';
 import { generateCombatStyleReport } from '@/lib/combat-analyst';
@@ -10,6 +10,7 @@ import { revalidatePath } from 'next/cache';
 import { customAlphabet } from 'nanoid';
 import { verifyProfileScreenshot } from '@/lib/ai-verifier';
 import { getUploadUrl, getPublicUrl } from '@/lib/s3';
+import { eq, and, or, desc } from 'drizzle-orm';
 
 const nanoid = customAlphabet('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ', 6);
 
@@ -28,16 +29,17 @@ export async function initiateVerification(gamerTag: string, platform: string) {
   const session = await getServerSession(authOptions);
   if (!session?.user) throw new Error('Unauthorized');
 
-  await dbConnect();
-  
   const verificationCode = `ARC-${nanoid()}`;
   
-  await User.findByIdAndUpdate(session.user.id, {
-    gamerTag,
-    tagPlatform: platform,
-    verificationCode,
-    verificationStatus: 'pending',
-  });
+  await db.update(User)
+    .set({
+      gamerTag,
+      tagPlatform: platform as any,
+      verificationCode,
+      verificationStatus: 'pending',
+      updatedAt: new Date()
+    })
+    .where(eq(User.id, session.user.id));
 
   revalidatePath(`/profile/${(session.user as any).username}`);
   return { success: true, code: verificationCode };
@@ -47,8 +49,7 @@ export async function verifyOperatorTag(screenshotUrl: string) {
   const session = await getServerSession(authOptions);
   if (!session?.user) throw new Error('Unauthorized');
 
-  await dbConnect();
-  const user = await User.findById(session.user.id);
+  const [user] = await db.select().from(User).where(eq(User.id, session.user.id));
   if (!user || !user.verificationCode) throw new Error('Verification not initiated');
 
   // 1. Analyze screenshot with Gemini
@@ -62,8 +63,13 @@ export async function verifyOperatorTag(screenshotUrl: string) {
   const codeMatches = result.bioCode === user.verificationCode;
 
   if (tagMatches && codeMatches) {
-    user.verificationStatus = 'verified';
-    await user.save();
+    await db.update(User)
+      .set({
+        verificationStatus: 'verified',
+        updatedAt: new Date()
+      })
+      .where(eq(User.id, session.user.id));
+
     revalidatePath(`/profile/${user.username}`);
     return { success: true };
   }
@@ -76,23 +82,31 @@ export async function verifyOperatorTag(screenshotUrl: string) {
 
 export async function analyzeCombatStyle(username: string) {
   try {
-    await dbConnect();
-    const user = await User.findOne({ username });
+    const [user] = await db.select().from(User).where(eq(User.username, username));
     if (!user) throw new Error('User not found');
 
-    const matchHistory = await Match.find({
-      $or: [{ challengerId: user._id }, { defenderId: user._id }],
-      status: 'completed'
-    })
-    .populate('gameId', 'title')
-    .sort({ updatedAt: -1 })
-    .limit(10)
-    .lean();
+    const rawMatchHistory = await db.query.matches.findMany({
+      where: and(
+        or(eq(Match.challengerId, user.id), eq(Match.defenderId, user.id)),
+        eq(Match.status, 'completed')
+      ),
+      orderBy: [desc(Match.updatedAt)],
+      limit: 10,
+      with: {
+        game: {
+          columns: {
+            title: true,
+          }
+        }
+      }
+    });
 
-    // Map user ID for the analyst logic
-    const preparedHistory = matchHistory.map(m => ({
+    // Map user ID and schema shapes for the analyst logic
+    const preparedHistory = rawMatchHistory.map((m: any) => ({
       ...m,
-      currentUserId: user._id.toString()
+      _id: m.id,
+      currentUserId: user.id,
+      gameId: m.game ? { title: m.game.title } : { title: 'Unknown' },
     }));
 
     const report = await generateCombatStyleReport(user.username, preparedHistory);
@@ -108,7 +122,6 @@ export async function updateProfile(data: any) {
   const session = await getServerSession(authOptions);
   if (!session?.user) throw new Error('Unauthorized');
 
-  await dbConnect();
   const update: any = {
     avatarUrl: data.avatarUrl,
     bannerUrl: data.bannerUrl,
@@ -123,9 +136,15 @@ export async function updateProfile(data: any) {
   // Remove undefined fields
   Object.keys(update).forEach(key => update[key] === undefined && delete update[key]);
 
-  await User.findByIdAndUpdate(session.user.id, update);
+  await db.update(User)
+    .set({
+      ...update,
+      updatedAt: new Date()
+    })
+    .where(eq(User.id, session.user.id));
 
   revalidatePath(`/profile/${(session.user as any).username}`);
   revalidatePath(`/settings`);
   return { success: true };
 }
+
